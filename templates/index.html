@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>منشئ الجداول الدراسية</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div id="help-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn">&times;</span>
+            <h2>مساعدة وشرح البرنامج</h2>
+            <p>
+                هذا البرنامج هو نظام متكامل لإنشاء الجداول الدراسية الجامعية بشكل تلقائي. يقوم النظام بتوزيع مئات المواد على عشرات الأساتذة مع مراعاة مجموعة معقدة من القيود لإنتاج جدول دقيق وخالٍ من التعارضات.
+            </p>
+            <h4>شرح المراحل الست:</h4>
+            <ul>
+                <li><b>المرحلة 1: إدخال البيانات الأساسية:</b>
+                    هنا يتم إدخال كل البيانات الخام للنظام، مثل أسماء الأساتذة، القاعات وأنواعها، المستويات الدراسية، والمقررات. يمكن أيضًا استيراد البيانات دفعة واحدة من ملف إكسل.</li>
+                <li><b>المرحلة 2: إدارة البيانات:</b>
+                    تتيح لك هذه المرحلة عرض، تعديل، وحذف البيانات التي أدخلتها. تشمل أيضًا قسمًا لإدارة "معرّفات عدم التكرار" لمنع جدولة مواد معينة (مثل الأعمال الموجهة) في نفس الفترة للمستوى الواحد.</li>
+                <li><b>المرحلة 3: تخصيص المقررات:</b>
+                    في هذه المرحلة يتم ربط الأساتذة بالمقررات التي يدرسونها. يمكنك اختيار أستاذ وتعيين المقررات المتاحة له.</li>
+                <li><b>المرحلة 4: إعداد هيكل الجدول الزمني:</b>
+                    هنا يتم بناء الهيكل الأساسي للجدول. تقوم بإضافة أيام الدراسة، وداخل كل يوم تحدد الفترات الزمنية (مثل 08:00 - 09:30) مع إمكانية وضع قيود خاصة على كل فترة (كتخصيصها لقاعات كبيرة فقط).</li>
+                <li><b>المرحلة 5: إنشاء الجداول الدراسية:</b>
+                    هذه هي مرحلة التشغيل. تقوم بضبط القيود المتقدمة (كتحديد أيام عمل الأساتذة، فترات الراحة)، ثم تختار خوارزمية البحث المفضلة (طماعة، تراجع، LNS...) وتضبط إعداداتها، وأخيرًا تضغط على زر الإنشاء.</li>
+                <li><b>المرحلة 6: النسخ الاحتياطي والاستعادة:</b>
+                    تستخدم هذه المرحلة للحفاظ على بياناتك. يمكنك تصدير كل معلومات البرنامج (أساتذة، مقررات، إعدادات، قيود) في ملف واحد، أو استعادة حالة البرنامج من نسخة سابقة، أو مسح كل البيانات للبدء من جديد.</li>
+            </ul>
+        </div>
+    </div>
+
+    <main>
+        <div class="top-buttons">
+            <button id="about-button">حول البرنامج</button>
+            <button id="help-button">مساعدة</button>
+        </div>
+
+        <h1>منشئ الجداول الدراسية</h1>
+        
+        <section id="data-entry">
+            <h2>المرحلة 1: إدخال البيانات الأساسية</h2>
+            <div class="form-container">
+                <form id="add-teacher-form" class="data-form">
+                    <h3>إضافة أساتذة</h3>
+                    <textarea id="teacher-names" rows="5" placeholder="اكتب أسماء الأساتذة (كل اسم في سطر)"></textarea>
+                    <button type="submit">إضافة الأساتذة</button>
+                </form>
+
+                <form id="add-room-form" class="data-form">
+                    <h3>إضافة قاعات</h3>
+                    <select id="room-type" required>
+                        <option value="" disabled selected>اختر نوع القاعات</option>
+                        <option value="كبيرة">كبيرة</option>
+                        <option value="صغيرة">صغيرة</option>
+                    </select>
+                    <textarea id="room-names" rows="4" placeholder="اكتب أسماء القاعات (كل اسم في سطر)"></textarea>
+                    <button type="submit">إضافة القاعات</button>
+                </form>
+
+                <form id="add-levels-form" class="data-form">
+                    <h3>إضافة مستوى دراسي</h3>
+                    <textarea id="level-names" rows="5" placeholder="اكتب أسماء المستويات هنا (كل اسم في سطر)"></textarea>
+                    <button type="submit">إضافة المستويات</button>
+                </form>
+                
+                <form id="bulk-add-form" class="data-form">
+                    <h3>إضافة مقررات جماعية</h3>
+                    <div id="bulk-course-levels-container" style="border: 1px solid #ccc; padding: 10px; border-radius: 4px; max-height: 150px; overflow-y: auto;">
+                        <p style="color: #888; text-align: center;">اختر مستوى واحدًا أو أكثر...</p>
+                    </div>
+                    <select id="bulk-room-type" required>
+                        <option value="صغيرة" selected>تتطلب قاعة صغيرة</option>
+                        <option value="كبيرة">تتطلب قاعة كبيرة</option>
+                    </select>
+                    <textarea id="course-names-bulk" rows="5" placeholder="الصق أسماء المقررات هنا (كل اسم في سطر)"></textarea>
+                    <button type="submit">إضافة هذه الدفعة</button>
+                </form>
+            </div>
+            <div style="margin-top: 25px; border-top: 2px dashed #ccc; padding-top: 20px;">
+                <h3 style="text-align: center; margin-bottom: 15px;">أو استيراد البيانات دفعة واحدة (عبر ملف)</h3>
+                <div class="setting-block" style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; border: 1px solid #dee2e6;">
+                    <p class="description" style="text-align: center;">
+                        استخدم هذه الأزرار لتحميل قالب إكسل فارغ، أو لاستيراد بيانات من ملف إكسل لملء البرنامج بسرعة.
+                    </p>
+                    <div class="final-buttons-container" style="display: flex; gap: 15px; justify-content: center;">
+                        <button id="export-template-btn" class="action-button" style="background-color: #17a2b8;">📄 تصدير البيانات الحالية (Excel)</button>
+                        <button id="import-data-btn" class="action-button" style="background-color: #fd7e14;">📥 استيراد بيانات من ملف</button>
+                    </div>
+                    <input type="file" id="import-file-input" style="display: none;" accept=".xlsx, .xls">
+                </div>
+            </div>
+        </section>
+
+        <section id="data-management">
+            <h2>المرحلة 2: عرض وإدارة البيانات المدخلة</h2>
+            <div class="management-container">
+                <div class="management-panel">
+                    <h4>الأساتذة</h4>
+                    <ul id="manage-teachers-list" class="management-list"></ul>
+                </div>
+                <div class="management-panel">
+                    <h4>القاعات</h4>
+                    <ul id="manage-rooms-list" class="management-list"></ul>
+                </div>
+                <div class="management-panel">
+                    <h4>المستويات الدراسية</h4>
+                    <ul id="manage-levels-list" class="management-list"></ul>
+                </div>
+                <div class="management-panel">
+                    <h4>المقررات</h4>
+                    <ul id="manage-courses-list" class="management-list"></ul>
+                </div>
+            </div>
+            <div class="management-panel" style="margin-top: 20px;">
+                <h4 style="text-align: center;">إدارة معرّفات عدم التكرار</h4>
+                <p style="text-align:center; padding: 0 15px; line-height: 1.6;">
+                    أدخل هنا المعرّفات التي لا يجب أن تتكرر في نفس الفترة الزمنية لكل مستوى.
+                    <br>
+                    <strong>(ضع كل معرّف في سطر منفصل)</strong>
+                </p>
+                <div id="identifiers-table-container" style="padding: 0 15px;"></div>
+                <button id="save-identifiers-btn" style="width: auto; padding: 10px 25px; margin: 20px auto 10px; display: block;">حفظ المعرّفات</button>
+            </div>
+            <div class="management-panel" style="margin-top: 20px; border-top: 2px dashed #28a745; padding-top: 15px;">
+                <h4 style="text-align: center;">إدارة الفئات المرنة (لتبديل الإسناد بين الأساتذة)</h4>
+                <p style="text-align:center; padding: 0 15px; line-height: 1.6;">
+                    عرّف هنا مجموعات المواد (الأفواج) التي يمكن للخوارزمية تبديل إسنادها بين الأساتذة بحرية.
+                </p>
+                
+                <div id="flex-category-controls" style="padding: 10px 15px; text-align: center; border-bottom: 1px solid #eee; margin-bottom: 15px;">
+                    <select id="flex-category-level-select" style="padding: 8px; font-size: 15px;">
+                        <option value="">-- اختر المستوى أولاً --</option>
+                    </select>
+                    <button id="add-flex-category-btn" type="button" style="width: auto; padding: 8px 15px; margin-left: 10px;" disabled>+ إضافة فئة جديدة لهذا المستوى</button>
+                </div>
+                
+                <div id="flex-categories-container" style="padding: 0 15px;">
+                    </div>
+            </div>
+        </section>
+
+        <section id="assign-courses">
+            <h2>المرحلة 3: تخصيص المقررات</h2>
+            <div class="assignment-container">
+                <div class="panel">
+                    <h3>الأساتذة</h3>
+                    <input type="search" id="teacher-search" placeholder="ابحث عن أستاذ..." class="search-box">
+                    <ul id="teacher-list"></ul>
+                </div>
+                <div class="panel">
+                    <h3>المقررات المتاحة (غير المسندة)</h3>
+                    <input type="search" id="course-search" placeholder="ابحث عن مقرر..." class="search-box">
+                    <ul id="course-list"></ul>
+                </div>
+            </div>
+            <button id="assign-button" disabled>تخصيص المقرر للأستاذ</button>
+        </section>
+
+        <section id="schedule-structure-setup">
+            <h2>المرحلة 4: إعداد هيكل الجدول الزمني</h2>
+            <div class="setting-block">
+                <p class="description">
+                    أضف أيام الدراسة التي تريدها، ثم في كل يوم، حدد الفترات الزمنية والمستويات الدراسية التي ستُدرّس في كل فترة.
+                </p>
+                <div class="day-controls-container">
+                    <button id="add-day-button" class="action-button" style="background-color: #28a745;">+ إضافة يوم دراسي</button>
+                    <button id="duplicate-day-button" class="action-button" style="background-color: #17a2b8;">&#128260; تكرار اليوم النشط</button>
+                </div>
+                <div class="tabs-container">
+                    <div class="tab-links" id="day-tabs-container"></div>
+                    <div class="tab-content" id="day-content-container"></div>
+                </div>
+            </div>
+        </section>
+
+        <section id="generated-timetables">
+            <h2>المرحلة 5: إنشاء الجداول الدراسية</h2>
+
+            <div class="settings-container" style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; border: 1px solid #dee2e6;">
+                
+                <div id="manual-days-assignment" style="margin-top: 15px; border-top: 1px dashed #ccc; padding-top: 15px;">
+                    <h4>1. تحديد أيام وقيود عمل الأساتذة (اختياري)</h4>
+                    <div id="professor-days-table-container"></div>
+                </div>
+
+                <div style="margin: 20px 0; border: 1px dashed #ccc; padding: 15px; border-radius: 6px;">
+                    <h4>2. اختر نوع قيد التوزيع التلقائي (للأساتذة بدون أيام يدوية) [لا يعمل مع الخوارزمية الطماعة]:</h4>
+                    <label style="cursor: pointer; font-size: 16px;">
+                        <input type="radio" name="distribution_rule_type" value="allowed" checked>
+                        <strong>الأيام مجموعة مسموحة (مرن):</strong> يلتزم بالحد الأقصى للأيام فقط (مثلاً، "3 أيام" تعني 3 أو 2 أو 1).
+                    </label>
+                    <br>
+                    <label style="cursor: pointer; font-size: 16px; margin-top: 10px; display: inline-block;">
+                        <input type="radio" name="distribution_rule_type" value="required">
+                        <strong>الأيام مجموعة مطلوبة (صارم):</strong> يجب استخدام العدد المحدد من الأيام بالضبط (قد يفشل إذا كان مستحيلاً).
+                    </label>
+                </div>
+ 
+                <div class="setting-group" style="margin-top: 15px; border-top: 1px dashed #ccc; padding-top: 15px;">
+                    <h4>3. اختر فترات الراحة (لن يتم وضع أي حصص فيها):</h4>
+                    <label><input type="checkbox" id="tuesday-evening-rest"> مساء الثلاثاء (آخر حصتين)</label><br>
+                    <label><input type="checkbox" id="thursday-evening-rest"> مساء الخميس (آخر حصتين)</label>
+                </div>
+
+                <div class="setting-group" style="margin-top: 15px; border-top: 1px dashed #ccc; padding-top: 15px;">
+                    <h4>4. قيود إضافية:</h4>
+                    <label>
+                        <input type="checkbox" id="prioritize-primary-slots-cb">
+                        <strong>فرض الأولوية للفترات الأساسية:</strong> (للمواد ذات القاعات الكبيرة)
+                    </label>
+
+                    <div style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 15px;">
+                        <label>
+                            <strong>الأساتذة المسموح لهم بالعمل يوم السبت (اختياري):</strong>
+                        </label>
+                        <div id="saturday-teachers-checkbox-container" style="width: 100%; height: 120px; overflow-y: scroll; border: 1px solid #ccc; border-radius: 4px; padding: 10px; background-color: white;">
+                            </div>
+                    </div>
+
+                    <div style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 15px;">
+                        <label>
+                            <strong>الأساتذة الذين لا يعملون آخر حصة أو حصتين (في كل أيام عملهم):</strong>
+                        </label>
+                        <div id="last-slot-restriction-container" style="width: 100%; max-height: 200px; overflow-y: auto; border: 1px solid #ccc; border-radius: 4px; padding: 10px; background-color: white; margin-top: 10px;">
+                            </div>
+                    </div>
+
+                    <div style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 15px;">
+                        <label for="max-sessions-per-day-select">
+                            <strong>الحد الأقصى للحصص في اليوم (يطبق على جميع الأساتذة):</strong>
+                            <br>
+                            <small>(إذا حدث تعارض مع عدد الحصص المسندة للأستاذ، سيظهر ذلك كحالة فشل في التقرير النهائي)</small>
+                        </label>
+                        <select id="max-sessions-per-day-select" style="width: 100%; padding: 8px; margin-top: 5px;">
+                            <option value="none" selected>غير محدد (لا يوجد حد)</option>
+                            <option value="2">حصتان</option>
+                            <option value="3">3 حصص</option>
+                            <option value="4">4 حصص</option>
+                        </select>
+                    </div>
+
+                    <div style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 15px;">
+                        <label for="consecutive-large-hall-select">
+                            <strong>قيد توالي القاعات الكبيرة (لنفس المستوى):</strong>
+                            <br>
+                            <small>حدد القاعة التي تريد منع المحاضرات المتتالية فيها لنفس المستوى.</small>
+                        </label>
+                        <select id="consecutive-large-hall-select" style="width: 100%; padding: 8px; margin-top: 5px;">
+                            <option value="none" selected>لا يوجد منع (السماح بالتوالي)</option>
+                            <option value="all">منع التوالي في كل القاعات الكبيرة</option>
+                            </select>
+                    </div>
+
+                    <div style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 15px;">
+                        <label for="teacher-pairs-textarea">
+                            <strong>اشتراك الأساتذة في نفس يوم العمل (اختياري) [لا يعمل مع الخوارزمية الطماعة]:</strong>
+                            <br>
+                            <small>(اكتب كل زوج من الأساتذة في سطر، مفصولين بفاصلة. مثال: أ.محمد، أ.خالد)</small>
+                        </label>
+                        <textarea id="teacher-pairs-textarea" rows="4" style="width: 100%;" placeholder="أ.محمد، أ.علي&#10;أ.خالد، أ.محمد"></textarea>
+                    </div>
+                    <div style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 15px;">
+                        <label>
+                            <strong>تخصيص قاعة كبيرة لكل مستوى (اختياري):</strong>
+                            <br>
+                            <small>(إذا تم تحديد قاعة، فإن كل المواد التي تتطلب قاعة كبيرة في هذا المستوى ستُجدول في هذه القاعة حصراً.)</small>
+                        </label>
+                        <div id="level-large-room-assignment-container" style="width: 100%; max-height: 200px; overflow-y: auto; border: 1px solid #ccc; border-radius: 4px; padding: 10px; background-color: white; margin-top: 10px;">
+                            </div>
+                        <div style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 15px;">
+                            <label>
+                                <strong>ربط مواد بقاعات صغيرة محددة (اختياري):</strong>
+                                <br>
+                                <small>(سيتم جدولة المادة المحددة حصراً في القاعة المختارة.)</small>
+                            </label>
+                            <div id="specific-small-room-assignments-container" style="width: 100%; border: 1px solid #ccc; border-radius: 4px; padding: 10px; background-color: white; margin-top: 10px;">
+                                </div>
+                            <button type="button" id="add-specific-room-assignment-btn" style="width: auto; padding: 8px 15px; margin-top: 10px;">+ إضافة تخصيص</button>
+                        </div>
+                    </div>
+                    </div>
+                <div class="setting-group" style="margin-top: 20px; padding-top: 20px; text-align: center; border-top: 2px solid #007bff;">
+
+                <div class="setting-group" style="margin-top: 20px; padding-top: 20px; text-align: center; border-top: 2px solid #007bff;">
+                    <button id="validate-data-button" style="width: auto; padding: 10px 20px; background-color: #ffc107; color: #333;">فحص البيانات بحثاً عن مشاكل</button>
+                    <button id="comprehensive-check-btn" class="action-button" style="width: auto; padding: 10px 20px; background-color: #fd7e14; display: none;">فحص شامل (النقص/التكرار)</button>
+                    <button id="save-settings-button" class="action-button" style="width: auto; padding: 10px 20px; background-color: #0d6efd;">💾 حفظ الإعدادات</button>
+                    
+                    <div style="margin: 20px 0; border: 1px dashed #ccc; padding: 15px; border-radius: 6px;">
+                        <h4>5. اختر طريقة البحث عن حل:</h4>
+                        <label style="cursor: pointer; font-size: 16px;">
+                            <input type="radio" name="scheduling_method" value="greedy" checked>
+                            <strong>الخوارزمية الطماعة (سريعة):</strong> تبحث عن أول حل مناسب وتتوقف. قد لا يكون الحل الأمثل.
+                        </label>
+                        <br>
+                        <label style="cursor: pointer; font-size: 16px; margin-top: 10px; display: inline-block;">
+                            <input type="radio" name="scheduling_method" value="backtracking">
+                            <strong>خوارزمية التراجع (بطيئة ودقيقة):</strong> تستكشف احتمالات متعددة وتتراجع عن القرارات الخاطئة لإيجاد حل أفضل.
+                        </label>
+                        <div id="timeout-container" style="display: none; margin-top: 10px; margin-right: 25px;">
+                            <label for="timeout-input">مهلة البحث (بالثواني): </label>
+                            <input type="number" id="timeout-input" value="30" min="5" style="width: 80px; padding: 5px;">
+                        </div>
+                    </div>
+                    <br>
+                    <label style="cursor: pointer; font-size: 16px; margin-top: 10px; display: inline-block;">
+                        <input type="radio" name="scheduling_method" value="tabu_search">
+                        <strong>البحث المحظور (تجريبي وسريع):</strong> يبدأ بحل عشوائي ويحسنه تدريجيًا.
+                    </label>
+                    <div id="tabu-search-container" style="display: none; margin-top: 10px; margin-right: 25px;">
+                        <label for="tabu-iterations-input">عدد التكرارات: </label>
+                        <input type="number" id="tabu-iterations-input" value="1000" min="100" style="width: 80px; padding: 5px;">
+                        <label for="tabu-tenure-input" style="margin-right: 15px;">حجم الذاكرة: </label>
+                        <input type="number" id="tabu-tenure-input" value="10" min="1" style="width: 80px; padding: 5px;">
+                        <label for="tabu-neighborhood-size-input" style="margin-right: 15px;">حجم الجوار: </label>
+                        <input type="number" id="tabu-neighborhood-size-input" value="50" min="10" style="width: 80px; padding: 5px;">
+                    </div>
+                    
+                    <br>
+                    <label style="cursor: pointer; font-size: 16px; margin-top: 10px; display: inline-block;">
+                        <input type="radio" name="scheduling_method" value="genetic_algorithm">
+                        <strong>الخوارزمية الجينية (قوية):</strong> تبحث عن حل مثالي عبر محاكاة التطور الطبيعي.
+                    </label>
+                    <div id="genetic-algorithm-container" style="display: none; margin-top: 10px; margin-right: 25px;">
+                        
+                        <label for="ga-population-input">حجم الجيل:</label>
+                        <input type="number" id="ga-population-input" value="50" min="10" style="width: 80px; padding: 5px;">
+                        
+                        <label for="ga-generations-input" style="margin-right: 15px;">عدد الأجيال:</label>
+                        <input type="number" id="ga-generations-input" value="200" min="50" style="width: 80px; padding: 5px;">
+                        
+                        <label for="ga-mutation-input" style="margin-right: 15px;">معدل الطفرة (%):</label>
+                        <input type="number" id="ga-mutation-input" value="5" min="1" max="100" style="width: 80px; padding: 5px;">
+                        
+                        <label for="ga-elitism-input" style="margin-right: 15px;">حجم النخبة:</label>
+                        <input type="number" id="ga-elitism-input" value="2" min="1" style="width: 80px; padding: 5px;">
+                    </div>
+
+                    <br>
+                    <label style="cursor: pointer; font-size: 16px; margin-top: 10px; display: inline-block;">
+                        <input type="radio" name="scheduling_method" value="memetic_algorithm">
+                        <strong>الخوارزمية الميميتيك (GA + بحث محلي):</strong> خوارزمية هجينة تجمع قوة الجينية مع دقة البحث المحلي.
+                    </label>
+                    <div id="memetic-algorithm-container" style="display: none; margin-top: 10px; margin-right: 25px;">
+                        
+                        <label for="ma-population-input">حجم الجيل:</label>
+                        <input type="number" id="ma-population-input" value="40" min="10" style="width: 80px; padding: 5px;">
+                        
+                        <label for="ma-generations-input" style="margin-right: 15px;">عدد الأجيال:</label>
+                        <input type="number" id="ma-generations-input" value="100" min="20" style="width: 80px; padding: 5px;">
+                        
+                        <label for="ma-mutation-input" style="margin-right: 15px;">معدل الطفرة (%):</label>
+                        <input type="number" id="ma-mutation-input" value="10" min="1" max="100" style="width: 80px; padding: 5px;">
+                        
+                        <label for="ma-elitism-input" style="margin-right: 15px;">حجم النخبة:</label>
+                        <input type="number" id="ma-elitism-input" value="2" min="1" style="width: 80px; padding: 5px;">
+                        
+                        <label for="ma-local-search-iterations" style="margin-right: 15px;">تكرارات البحث المحلي:</label>
+                        <input type="number" id="ma-local-search-iterations" value="5" min="1" max="50" style="width: 80px; padding: 5px;" title="عدد محاولات التحسين التي ستتم على كل حل جديد في كل جيل">
+                    </div>
+
+                    <br>
+                    <label style="cursor: pointer; font-size: 16px; margin-top: 10px; display: inline-block;">
+                        <input type="radio" name="scheduling_method" value="clonalg">
+                        <strong>خوارزمية الاستنساخ (CLONALG):</strong> تحاكي جهاز المناعة لإيجاد حلول محسنة.
+                    </label>
+                    <div id="clonalg-container" style="display: none; margin-top: 10px; margin-right: 25px;">
+                        
+                        <label for="clonalg-population-input">حجم السكان:</label>
+                        <input type="number" id="clonalg-population-input" value="50" min="10" style="width: 80px; padding: 5px;">
+                        
+                        <label for="clonalg-generations-input" style="margin-right: 15px;">عدد الأجيال:</label>
+                        <input type="number" id="clonalg-generations-input" value="100" min="20" style="width: 80px; padding: 5px;">
+                        
+                        <label for="clonalg-selection-input" style="margin-right: 15px;">حجم النخبة:</label>
+                        <input type="number" id="clonalg-selection-input" value="10" min="2" style="width: 80px; padding: 5px;" title="عدد أفضل الحلول التي سيتم استنساخها في كل جيل">
+                        
+                        <label for="clonalg-clone-factor-input" style="margin-right: 15px;">معامل الاستنساخ:</label>
+                        <input type="number" id="clonalg-clone-factor-input" value="1.0" min="0.1" step="0.1" style="width: 80px; padding: 5px;" title="يتحكم في عدد النسخ المنتجة من الحلول الجيدة">
+                    </div>
+
+                    <br>
+                    <label style="cursor: pointer; font-size: 16px; margin-top: 10px; display: inline-block;">
+                        <input type="radio" name="scheduling_method" value="large_neighborhood_search">
+                        <strong>البحث الجِوَاري الواسع (LNS):</strong> (تخريب وإعادة بناء) لإيجاد حلول ممتازة.
+                    </label>
+                    <div id="lns-container" style="display: none; margin-top: 10px; margin-right: 25px;">
+                        
+                        <label for="lns-iterations-input">عدد التكرارات:</label>
+                        <input type="number" id="lns-iterations-input" value="500" min="50" style="width: 80px; padding: 5px;">
+                        
+                        <label for="lns-ruin-factor-input" style="margin-right: 15px;">معامل التخريب (%):</label>
+                        <input type="number" id="lns-ruin-factor-input" value="20" min="5" max="80" style="width: 80px; padding: 5px;" title="نسبة الأساتذة الذين سيتم حذف وإعادة جدولة محاضراتهم في كل دورة"> 
+                    </div>
+
+                    <br>
+                    <label style="cursor: pointer; font-size: 16px; margin-top: 10px; display: inline-block;">
+                        <input type="radio" name="scheduling_method" value="variable_neighborhood_search">
+                        <strong>البحث الجِوَاري المتغير (VNS):</strong> (هز + بحث محلي) خوارزمية قوية لإيجاد حلول ممتازة.
+                    </label>
+                    <div id="vns-container" style="display: none; margin-top: 10px; margin-right: 25px;">
+                        
+                        <label for="vns-iterations-input">عدد التكرارات:</label>
+                        <input type="number" id="vns-iterations-input" value="300" min="50" style="width: 80px; padding: 5px;">
+                        
+                        <label for="vns-k-max-input" style="margin-right: 15px;">أقصى حجم للجوار (k):</label>
+                        <input type="number" id="vns-k-max-input" value="10" min="2" max="50" style="width: 80px; padding: 5px;" title="أقصى عدد من المواد التي سيتم 'هزها' في كل دورة">
+                    
+                    </div>
+
+                    <br>
+                    <label style="cursor: pointer; font-size: 16px; margin-top: 10px; display: inline-block; border: 2px solid #28a745; padding: 10px; border-radius: 5px;">
+                        <input type="radio" name="scheduling_method" value="vns_flexible">
+                        <strong>البحث الجواري المتغير المرن (VNS-Flexible):</strong><span style="color: #28a745; font-weight: bold;"> (موصى به)</span>
+                        <br>
+                        <small>نسخة مطورة تدعم تبديل إسناد المواد بين الأساتذة ضمن الفئات المرنة.</small>
+                    </label>
+
+                    <br>
+                    <label style="cursor: pointer; font-size: 16px; margin-top: 10px; display: inline-block; border: 2px solid #20c997; padding: 10px; border-radius: 5px;">
+                        <input type="radio" name="scheduling_method" value="hyper_heuristic">
+                        <strong>النظام الخبير (Hyper-heuristic):</strong><span style="color: #1a8a6d; font-weight: bold;"> (جديد)</span>
+                        <br>
+                        <small>يقوم النظام تلقائيًا بتنسيق الخوارزميات الأخرى لإيجاد أفضل حل.</small>
+                    </label>
+                    <div id="hyper-heuristic-container" style="display: none; margin-top: 10px; margin-right: 25px;">
+                        <label for="hh-iterations-input">عدد الدورات الرئيسية:</label>
+                        <input type="number" id="hh-iterations-input" value="50" min="5" style="width: 80px; padding: 5px;" title="العدد الإجمالي لمحاولات التحسين التي سيقوم بها النظام الخبير.">
+                        <label for="hh-tabu-tenure-input" style="margin-right: 15px;">مدة الحظر:</label>
+                        <input type="number" id="hh-tabu-tenure-input" value="3" min="0" style="width: 80px; padding: 5px;" title="عدد الدورات التي ستبقى فيها الخوارزمية المستخدمة محظورة.">
+                    
+                    <div style="margin-top: 15px; border-top: 1px solid #ccc; padding-top: 10px;">
+                        <label style="font-weight: bold; display: block; margin-bottom: 5px;">طريقة التحكم في الخوارزميات الفرعية:</label>
+                        <div>
+                            <label><input type="radio" name="hh_budget_mode" value="time" checked> ميزانية زمنية</label>
+                            <input type="number" id="hh-time-budget-input" value="5" min="1" style="width: 60px; padding: 5px;" title="أقصى عدد ثواني لكل خوارزمية فرعية"> ثانية
+                        </div>
+                        <div style="margin-top: 5px;">
+                            <label><input type="radio" name="hh_budget_mode" value="iterations"> عدد دورات محدد</label>
+                            <input type="number" id="hh-llh-iterations-input" value="30" min="5" style="width: 60px; padding: 5px;" title="عدد الدورات الداخلية لكل خوارزمية فرعية"> دورة
+                        </div>
+                        <div style="margin-top: 5px;">
+                            <label><input type="radio" name="hh_budget_mode" value="stagnation"> التوقف عند الركود</label>
+                            <input type="number" id="hh-stagnation-limit-input" value="15" min="5" style="width: 60px; padding: 5px;" title="أقصى عدد ثواني بدون تحسن قبل إيقاف الخوارزمية"> ثانية
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 20px; text-align: center;">
+                        <label style="font-weight: bold; display: block; margin-bottom: 10px;">الخوارزميات المسموح بها:</label>
+                        <div style="display: flex; flex-wrap: wrap; gap: 15px; justify-content: center;">
+                            <label><input type="checkbox" name="hh_llh_select" value="VNS_Flexible" checked> VNS-F</label>
+                            <label><input type="checkbox" name="hh_llh_select" value="LNS" checked> LNS</label>
+                            <label><input type="checkbox" name="hh_llh_select" value="Tabu_Search" checked> Tabu</label>
+                            <label><input type="checkbox" name="hh_llh_select" value="Memetic_Algorithm" checked> Memetic</label>
+                            <label><input type="checkbox" name="hh_llh_select" value="Genetic_Algorithm" checked> Genetic</label>
+                            <label><input type="checkbox" name="hh_llh_select" value="CLONALG" checked> CLONALG</label>
+                        </div>
+                    </div>
+                    
+                    </div>
+
+                    <div style="margin-top: 25px; padding: 15px; border: 2px solid #fd7e14; border-radius: 8px; background-color: #fff3e0;">
+                        <label for="intensive-search-attempts" style="font-weight: bold; font-size: 17px; color: #d9534f;">
+                            بحث مكثف (عدد المحاولات):
+                        </label>
+                        <input type="number" id="intensive-search-attempts" value="1" min="1" max="100" style="width: 100px; padding: 8px; font-size: 16px; text-align: center; border: 1px solid #ffc107;" title="يقوم بتكرار عملية البحث بالخوارزمية المختارة لعدد من المرات ثم يختار النتيجة الأفضل. مفيد جداً مع الخوارزميات العشوائية.">
+                        <p style="font-size: 13px; margin-top: 8px; color: #555;">
+                            عند وضع قيمة أكبر من 1، سيتم إعادة تشغيل الخوارزمية عدة مرات وفي النهاية سيتم عرض أفضل نتيجة تم التوصل إليها.
+                        </p>
+                    </div>  
+                    <div style="margin-top: 25px;">
+                        <button id="generate-schedule-button" style="width: auto; padding: 12px 30px; font-size: 18px;">🚀 إنشاء الجدول الآن</button>
+                        <button id="stop-generation-button" class="action-button-stop" style="display: none;">🛑 إيقاف البحث</button>
+                    </div>
+                    <pre id="log-output" style="background-color: #111; color: #0f0; padding: 15px; border-radius: 5px; height: 300px; overflow-y: scroll; display: none;"></pre>
+                    </div>
+                    <div id="progress-container" class="progress-container" style="display: none; margin-top: 15px;">
+                        <label for="progress-bar-wrapper" style="display: block; margin-bottom: 5px; font-weight: bold;">مؤشر النجاح (الخلو من الأخطاء):</label>
+                        <div id="progress-bar-wrapper" class="progress-bar-wrapper">
+                            <div id="progress-bar" class="progress-bar">0%</div>
+                        </div>
+                    </div>
+            </div>
+            <div id="timetables-output-area" style="margin-top: 20px;">
+                <div id="stats-dashboard-container" class="stats-dashboard-container" style="display: none;">
+                    <h3>لوحة المعلومات الإحصائية</h3>
+                    <div id="stats-dashboard" class="stats-dashboard">
+                        <div class="stat-card">
+                            <h4><span class="stat-icon">📊</span> إحصائيات عامة</h4>
+                            <ul id="general-stats-list"></ul>
+                        </div>
+                        <div class="stat-card">
+                            <h4><span class="stat-icon">📚</span> عدد المواد لكل مستوى</h4>
+                            <ul id="level-counts-list"></ul>
+                        </div>
+                        <div class="stat-card">
+                            <h4><span class="stat-icon">✅</span> عدد المواد الموزعة لكل مستوى</h4>
+                            <ul id="placed-level-counts-list"></ul>
+                        </div>
+                        <div class="stat-card">
+                            <h4><span class="stat-icon">📈</span> الأساتذة الأكثر عبئاً</h4>
+                            <ul id="most-burdened-list"></ul>
+                        </div>
+                        <div class="stat-card">
+                            <h4><span class="stat-icon">📉</span> الأساتذة الأقل عبئاً</h4>
+                            <ul id="least-burdened-list"></ul>
+                        </div>
+                        <div class="stat-card">
+                            <h4><span class="stat-icon">⚠️</span> حالات الفشل</h4>
+                            <table id="failure-stats-list" class="mini-failure-table">
+                                </table>
+                        </div>
+                    </div>
+                </div>
+                <div id="schedules-display"></div> 
+            </div>
+
+        </section>
+
+        <section id="settings-management-section">
+            <h2>إدارة مجموعات الإعدادات</h2>
+            <div class="settings-container" style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; border: 1px solid #dee2e6;">
+                <p class="description">
+                    يمكنك حفظ إعدادات الجدول الزمني والقيود الحالية باسم معين لاستعادتها لاحقًا، أو استعادة إعدادات محفوظة مسبقًا.
+                </p>
+                <div style="display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap; justify-content: center;">
+                    <button id="save-current-settings-as-btn" class="action-button" style="background-color: #007bff;">💾 حفظ الإعدادات الحالية باسم</button>
+                    
+                    <select id="saved-settings-dropdown" style="padding: 10px; border-radius: 5px; border: 1px solid #ccc; font-size: 16px; flex-grow: 1; max-width: 300px;">
+                        <option value="">-- اختر إعدادات محفوظة --</option>
+                    </select>
+                    
+                    <button id="load-selected-settings-btn" class="action-button" style="background-color: #28a745;" disabled>📂 استعادة الإعدادات المختارة</button>
+                    <button id="delete-selected-settings-btn" class="action-button" style="background-color: #dc3545;" disabled>🗑️ حذف الإعدادات المختارة</button>
+                </div>
+            </div>
+        </section>
+
+        <section id="backup-restore-section">
+            <h2>المرحلة 6: النسخ الاحتياطي والاستعادة</h2>
+            <div class="settings-container" style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; border: 1px solid #dee2e6;">
+                <p class="description">
+                    استخدم هذه الأزرار لحفظ كل بيانات البرنامج (الأساتذة، القاعات، المواد، الإعدادات...) في ملف واحد، أو استعادة البيانات من ملف نسخة احتياطية.
+                    <br><strong>تحذير:</strong> عملية الاستعادة ستقوم بالكتابة فوق كل البيانات الحالية.
+                </p>
+                <div class="final-buttons-container" style="display: flex; gap: 15px; justify-content: center;">
+                    <button id="backup-btn" class="action-button" style="background-color: #218838;">💾 تصدير نسخة احتياطية</button>
+                    <button id="restore-btn" class="action-button" style="background-color: #e0a800;">📂 استيراد نسخة احتياطية</button>
+                    <button id="reset-all-btn" class="action-button" style="background-color: #dc3545;">🔄 مسح كل البيانات</button>
+                    <button id="shutdown-btn" class="action-button" style="background-color: #343a40;">🛑 إيقاف الخادم</button>
+                </div>
+                <input type="file" id="restore-file-input" style="display: none;" accept=".json">
+            </div>
+        </section>
+        <section id="failure-report-section" style="display: none; margin-top: 40px;">
+            <h2>تقرير مفصل لعملية التوزيع</h2>
+            <div class="management-panel">
+                <h4>المواد التي لم توزع أو خرقت قيداً</h4>
+                <div id="scheduled-failures-table-container">
+                    </div>
+            </div>
+            <div class="management-panel" style="margin-top: 20px;">
+                <h4>المواد غير المسندة (لم تدخل في عملية التوزيع)</h4>
+                <ul id="unassigned-courses-list" class="management-list"></ul>
+            </div>
+        </section>
+        <section id="comprehensive-check-report-section" style="display: none; margin-top: 40px;">
+            <h2>نتائج الفحص الشامل (النقص/التكرار)</h2>
+            <div class="management-panel">
+                <h4>قائمة المشاكل التي تم العثور عليها:</h4>
+                <div id="comprehensive-check-results-container">
+                    </div>
+            </div>
+        </section>
+    </main>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

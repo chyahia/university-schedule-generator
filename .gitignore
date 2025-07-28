@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.pyc
+
+# Virtual Environment
+.venv/
+venv/
+
+# Instance Folder (for Flask secrets, etc.)
+instance/
+
+# Database file (user-specific data should not be in the repo)
+schedule_database.db
