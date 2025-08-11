@@ -1,0 +1,17 @@
+{
+    "OTHER": {
+        "VNS_Flexible": 741.0140416275128,
+        "LNS": 71.91311934550006,
+        "Tabu_Search": 801.9962103291431
+    },
+    "NO_ERRORS": {
+        "VNS_Flexible": 0.0,
+        "LNS": 0.0,
+        "Tabu_Search": 0.0
+    },
+    "UNPLACED_LECTURES": {
+        "VNS_Flexible": 172.92793483279553,
+        "LNS": 1029.6345062879313,
+        "Tabu_Search": 174.49977664158268
+    }
+}

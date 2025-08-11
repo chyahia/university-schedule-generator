@@ -1017,3 +1017,106 @@ button:active {
 #last-slot-restriction-container table tbody tr:hover {
     background-color: #e9ecef; /* لون أغمق قليلاً عند مرور الفأرة للمزيد من الوضوح */
 }
+
+/* ✨✨ --- بداية إضافة تنسيقات تقرير التحسين --- ✨✨ */
+
+.refinement-log-list {
+    list-style-type: none;
+    padding: 0;
+    margin: 0;
+}
+
+.refinement-log-list li {
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 5px;
+    margin-bottom: 10px;
+    padding: 5px 15px;
+}
+
+.refinement-log-list pre {
+    white-space: pre-wrap; /* يسمح بالتفاف النص الطويل */
+    word-wrap: break-word;
+    font-family: sans-serif; /* استخدام نفس خط الصفحة */
+    font-size: 15px;
+    line-height: 1.6;
+    margin: 0;
+}
+
+/* ✨✨ --- نهاية الإضافة --- ✨✨ */
+
+/* ✨✨ --- بداية الإضافة: تنسيق خيارات التحسين --- ✨✨ */
+#refinement-level-container .refinement-options {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+#refinement-level-container .refinement-options label {
+    cursor: pointer;
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 5px;
+    padding: 10px 15px;
+    transition: background-color 0.2s;
+}
+
+#refinement-level-container .refinement-options label:hover {
+    background-color: #e9ecef;
+}
+
+#refinement-level-container .refinement-options input[type="radio"] {
+    margin-left: 10px;
+    vertical-align: middle;
+}
+/* ✨✨ --- نهاية الإضافة --- ✨✨ */
+/* ================== تنسيق قسم عرض القيود (جديد) ================== */
+.constraints-layout-container {
+    display: flex;
+    gap: 25px; /* مسافة بين العمودين */
+    align-items: flex-start; /* محاذاة العناصر من الأعلى */
+}
+
+.constraint-column {
+    flex: 1; /* يجعل كل عمود يأخذ نصف المساحة المتاحة */
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 15px 20px;
+}
+
+.constraint-column h4 {
+    margin-top: 0;
+    border-bottom: 2px solid #ccc;
+    padding-bottom: 10px;
+    margin-bottom: 15px;
+    color: #343a40;
+}
+
+.constraint-column .description {
+    font-size: 14px;
+    color: #6c757d;
+    line-height: 1.6;
+    margin-bottom: 20px;
+}
+
+/* تنسيق قائمة القيود الصارمة */
+.constraint-column ul {
+    list-style-type: none;
+    padding-right: 0;
+}
+
+.constraint-column ul li {
+    margin-bottom: 12px;
+    position: relative;
+    padding-right: 25px; /* مساحة للأيقونة */
+    font-size: 15px;
+}
+
+.constraint-column ul li::before {
+    content: '🔴'; /* يمكنك استخدام '✓' أو أي أيقونة أخرى */
+    color: #dc3545; /* لون الأيقونة */
+    position: absolute;
+    right: 0;
+    top: 2px;
+}

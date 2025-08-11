@@ -68,6 +68,7 @@ function loadInitialData() {
         });
         
         createProfessorDaysTable(teachers, teacherData);
+        populateRefinementTeacherList(teachers);
 
         const teacherList = document.getElementById('teacher-list');
         teacherList.innerHTML = ''; 
@@ -139,6 +140,31 @@ function loadInitialData() {
     })
     .catch(error => console.error('خطأ في تحميل البيانات الأولية:', error));
 }
+
+// ✨✨ --- بداية إضافة دالة ملء قائمة أساتذة التحسين --- ✨✨
+function populateRefinementTeacherList(teachers) {
+    const container = document.getElementById('refinement-teacher-selection-container');
+    if (!container) return;
+    container.innerHTML = '';
+    teachers.forEach(teacher => {
+        if (!teacher || !teacher.name) return;
+        const label = document.createElement('label');
+        label.style.display = 'block';
+        label.style.cursor = 'pointer';
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.name = 'refine_teacher'; // اسم موحد للمجموعة
+        checkbox.value = teacher.name;
+        checkbox.style.marginLeft = '8px';
+
+        label.appendChild(checkbox);
+        label.appendChild(document.createTextNode(teacher.name));
+
+        container.appendChild(label);
+    });
+}
+// ✨✨ --- نهاية الإضافة --- ✨✨
 
 function populateLevelDropdowns(levels) {
     // --- الجزء الخاص بالقوائم المنسدلة الأخرى يبقى كما هو ---
@@ -336,6 +362,17 @@ function collectAllCurrentSettings() {
         flexible_categories_to_save.push(category);
     });
     
+    // ✨ --- بداية الإضافة الجديدة: جمع مستوى صرامة القيود --- ✨
+    const constraint_severities = {};
+    document.querySelectorAll('#constraint-severity-table tbody tr').forEach(row => {
+        const key = row.dataset.constraintKey;
+        const select = row.querySelector('select');
+        if (key && select) {
+            constraint_severities[key] = select.value; // ستكون القيمة "hard", "high", "low" etc.
+        }
+    });
+    // ✨ --- نهاية الإضافة الجديدة --- ✨
+    
     const algorithm_settings = {
         method: document.querySelector('input[name="scheduling_method"]:checked').value,
         timeout: document.getElementById('timeout-input').value,
@@ -371,9 +408,12 @@ function collectAllCurrentSettings() {
         intensive_search_attempts: document.getElementById('intensive-search-attempts').value,
         distribution_rule_type: document.querySelector('input[name="distribution_rule_type"]:checked').value,
         prioritize_primary: document.getElementById('prioritize-primary-slots-cb').checked,
-        teacher_pairs_text: document.getElementById('teacher-pairs-textarea').value
+        prefer_morning_slots: document.getElementById('prefer-morning-slots-cb').checked,
+        teacher_pairs_text: document.getElementById('teacher-pairs-textarea').value,
+        refinement_level: document.querySelector('input[name="refinement_level"]:checked').value,
+        refinement_selected_teachers: Array.from(document.querySelectorAll('input[name="refine_teacher"]:checked')).map(cb => cb.value)
     };
-
+    
     // --- ✨ بناء الكائن النهائي بالهيكل الصحيح ✨ ---
     return {
         schedule_structure: collectScheduleStructureFromUI(),
@@ -390,7 +430,8 @@ function collectAllCurrentSettings() {
             specific_small_room_assignments: specific_small_room_assignments_to_save
         },
         flexible_categories: flexible_categories_to_save,
-        algorithm_settings: algorithm_settings
+        algorithm_settings: algorithm_settings,
+        constraint_severities: constraint_severities
     };
 }
 
@@ -472,6 +513,7 @@ function setupEventListeners() {
                             populateDashboard(data);
                             displaySchedules(data.schedule, data.days, data.slots);
                             displayFailureReport(data.failures, data.unassigned_courses);
+                            document.getElementById('refine-schedule-btn').style.display = 'inline-block';
                         } finally {
                             resetGenerationUI();
                             let finalMessage = "اكتملت عملية الجدولة.\n\n" + (data.failures && data.failures.length > 0 ? `--- تقرير الفشل (${data.failures.length} حالة) ---\n` + data.failures.slice(0, 5).map(f => `• ${f.teacher_name || "N/A"}: ${f.reason || "N/A"}`).join('\n') : "تم إنشاء الجداول بنجاح.");
@@ -514,9 +556,7 @@ function setupEventListeners() {
             fetch('/api/stop-generation', { method: 'POST' });
             this.disabled = true;
             this.textContent = '...جاري الإيقاف';
-            if (eventSource) {
-                eventSource.close();
-            }
+            
         }
     });
 
@@ -807,6 +847,143 @@ function setupEventListeners() {
             }
         });
     }
+    const refineBtn = document.getElementById('refine-schedule-btn');
+    if (refineBtn) {
+        refineBtn.addEventListener('click', () => {
+            if (!currentScheduleData.schedule) {
+                alert('لا يوجد جدول لتحسينه.');
+                return;
+            }
+
+            const logOutput = document.getElementById('log-output');
+            logOutput.textContent = 'بدء الاتصال بالخادم لبدء عملية التحسين...\n';
+            logOutput.style.display = 'block';
+            refineBtn.disabled = true;
+            refineBtn.textContent = 'جاري التحسين...';
+
+            // إخفاء التقارير القديمة إذا كانت ظاهرة
+            document.getElementById('failure-report-section').style.display = 'none';
+            document.getElementById('comprehensive-check-report-section').style.display = 'none';
+            document.getElementById('refinement-report-section').style.display = 'none';
+
+            const selectedTeachers = Array.from(document.querySelectorAll('input[name="refine_teacher"]:checked')).map(cb => cb.value);
+
+            if (selectedTeachers.length === 0) {
+                alert('الرجاء اختيار أستاذ واحد على الأقل للتحسين، أو اضغط "تحديد الكل" لتحسين جميع الجداول.');
+                logOutput.style.display = 'none';
+                refineBtn.disabled = false;
+                refineBtn.textContent = '🔄 تحسين وضغط الجدول';
+                return; // إيقاف العملية
+            }
+
+            const settings = collectAllCurrentSettings();
+            const payload = {
+                schedule: currentScheduleData.schedule,
+                days: currentScheduleData.days,
+                slots: currentScheduleData.slots,
+                settings: settings,
+                selected_teachers: selectedTeachers // <-- إضافة القائمة الجديدة
+            };
+
+            let eventSource = null;
+
+            fetch('/api/start-refinement', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(response => {
+                if (!response.ok) throw new Error('فشل في بدء عملية التحسين.');
+                return response.json();
+            })
+            .then(data => {
+                if (data.status === 'ok') {
+                    logOutput.textContent += 'تم بدء العملية بنجاح. جاري استقبال سجل المتابعة...\n';
+
+                    eventSource = new EventSource('/stream-logs');
+
+                    eventSource.onmessage = function(event) {
+                        const message = event.data;
+
+                        if (message.startsWith("DONE_REFINE")) {
+                            const jsonData = message.substring(11);
+                            const resultData = JSON.parse(jsonData);
+
+                            logOutput.textContent += '\n--- اكتملت عملية التحسين بنجاح! ---';
+
+                            // تحديث كل البيانات
+                            currentScheduleData.schedule = resultData.schedule;
+                            currentScheduleData.days = resultData.days;
+                            currentScheduleData.slots = resultData.slots;
+                            currentScheduleByProfessor = resultData.prof_schedules;
+                            currentFreeRoomsSchedule = resultData.free_rooms;
+
+                            // إعادة عرض الجداول
+                            displaySchedules(resultData.schedule, resultData.days, resultData.slots);
+                            if (document.getElementById('free-rooms-container')) {
+                                displayFreeRoomsSchedule(currentFreeRoomsSchedule, resultData.days, resultData.slots);
+                            }
+
+                            // ✨✨ --- بداية الإضافة: عرض التقرير النهائي في أسفل الصفحة --- ✨✨
+                            const reportSection = document.getElementById('refinement-report-section');
+                            const logContainer = document.getElementById('refinement-log-container');
+                            const refinementLog = resultData.refinement_log;
+
+                            if (reportSection && logContainer) {
+                                reportSection.style.display = 'block';
+                                logContainer.innerHTML = ''; // مسح المحتوى القديم
+
+                                if (refinementLog && refinementLog.length > 0) {
+                                    const logList = document.createElement('ul');
+                                    logList.className = 'refinement-log-list';
+                                    refinementLog.forEach(message => {
+                                        const listItem = document.createElement('li');
+                                        listItem.innerHTML = `<pre>${message}</pre>`;
+                                        logList.appendChild(listItem);
+                                    });
+                                    logContainer.appendChild(logList);
+                                } else {
+                                    logContainer.innerHTML = '<p style="text-align: center; padding: 20px;">لا توجد تحسينات إضافية ممكنة. الجدول في أفضل حالة.</p>';
+                                }
+                            }
+                            // ✨✨ --- نهاية الإضافة --- ✨✨
+
+                            refineBtn.textContent = '🔄 تحسين وضغط الجدول';
+                            refineBtn.disabled = false;
+                            eventSource.close();
+
+                        } else if (message.startsWith("DONE")) {
+                            // تجاهل رسالة الانتهاء الخاصة بالإنشاء العادي
+                        }
+                        else {
+                            logOutput.textContent += message + '\n';
+                            logOutput.scrollTop = logOutput.scrollHeight;
+                        }
+                    };
+
+                    eventSource.onerror = function() {
+                        logOutput.textContent += '\n--- انقطع الاتصال بالخادم. ---';
+                        refineBtn.textContent = '🔄 تحسين وضغط الجدول';
+                        refineBtn.disabled = false;
+                        if(eventSource) eventSource.close();
+                    };
+                }
+            })
+            .catch(error => {
+                logOutput.textContent += `\nحدث خطأ: ${error.message}`;
+                refineBtn.textContent = '🔄 تحسين وضغط الجدول';
+                refineBtn.disabled = false;
+            });
+        });
+    }
+    // ✨✨ --- بداية إضافة تفعيل أزرار التحكم --- ✨✨
+    document.getElementById('select-all-refine-teachers').addEventListener('click', () => {
+        document.querySelectorAll('#refinement-teacher-selection-container input[type="checkbox"]').forEach(cb => cb.checked = true);
+    });
+    document.getElementById('deselect-all-refine-teachers').addEventListener('click', () => {
+        document.querySelectorAll('#refinement-teacher-selection-container input[type="checkbox"]').forEach(cb => cb.checked = false);
+    });
+    // ✨✨ --- نهاية الإضافة --- ✨✨
 }
 
 // ==================== دوال إدارة الفئات المرنة ====================
@@ -1226,7 +1403,7 @@ function loadAndBuildIdentifiersTable() {
                 const cell = textareaChunkRow.insertCell();
                 cell.style.height = 'auto';
                 const identifiersText = (savedIdentifiers[level] || []).join('\n');
-                cell.innerHTML = `<textarea data-level="${level}" style="width: 100%; height: 150px; resize: vertical; padding: 8px; font-size: 16px; border: 1px solid #ccc; border-radius: 4px;">${identifiersText}</textarea>`;
+                cell.innerHTML = `<textarea data-level="${level}" rows="2" style="width: 100%; resize: vertical; padding: 8px; font-size: 16px; border: 1px solid #ccc; border-radius: 4px;">${identifiersText}</textarea>`;
             });
 
             // 4. إضافة الجدول المكتمل لهذه المجموعة إلى الحاوية الرئيسية
@@ -1533,6 +1710,7 @@ function applySettingsToUI(settings) {
         }
         document.getElementById('hh-time-budget-input').value = algoSettings.hh_time_budget || 5;
         document.getElementById('hh-llh-iterations-input').value = algoSettings.hh_llh_iterations || 30;
+        document.getElementById('hh-stagnation-limit-input').value = algoSettings.hh_stagnation_limit || 15;
         document.getElementById('hh-tabu-tenure-input').value = algoSettings.hh_tabu_tenure || 3;
         if (algoSettings.hh_selected_llh) {
             document.querySelectorAll('input[name="hh_llh_select"]').forEach(cb => cb.checked = false);
@@ -1551,6 +1729,7 @@ function applySettingsToUI(settings) {
             document.querySelector(`input[name="distribution_rule_type"][value="${algoSettings.distribution_rule_type}"]`).checked = true;
         }
         document.getElementById('prioritize-primary-slots-cb').checked = algoSettings.prioritize_primary || false;
+        document.getElementById('prefer-morning-slots-cb').checked = algoSettings.prefer_morning_slots || false;
         document.getElementById('teacher-pairs-textarea').value = algoSettings.teacher_pairs_text || '';
         document.getElementById('max-sessions-per-day-select').value = algoSettings.max_sessions_per_day || 'none';
         if (algoSettings.consecutive_large_hall_rule) {
@@ -1570,6 +1749,40 @@ function applySettingsToUI(settings) {
             }
         }, 200);
     }
+    if (settings.algorithm_settings && settings.algorithm_settings.refinement_selected_teachers) {
+        const selectedTeachers = settings.algorithm_settings.refinement_selected_teachers;
+
+        // أولاً، قم بإلغاء تحديد الكل لضمان بداية نظيفة
+        document.querySelectorAll('input[name="refine_teacher"]').forEach(cb => cb.checked = false);
+
+        // ثانياً، حدد فقط الأساتذة المحفوظين في الإعدادات
+        selectedTeachers.forEach(teacherName => {
+            // نستخدم CSS.escape للتعامل مع الأسماء التي قد تحتوي على رموز خاصة
+            const checkbox = document.querySelector(`input[name="refine_teacher"][value="${CSS.escape(teacherName)}"]`);
+            if (checkbox) {
+                checkbox.checked = true;
+            }
+        });
+    }
+    if (settings.algorithm_settings && settings.algorithm_settings.refinement_level) {
+        const refinementRadio = document.querySelector(`input[name="refinement_level"][value="${settings.algorithm_settings.refinement_level}"]`);
+        if (refinementRadio) {
+            refinementRadio.checked = true;
+        }
+    }
+    // --- ✨ بداية الإضافة: استعادة إعدادات صرامة القيود --- ✨
+    if (settings.constraint_severities) {
+        for (const key in settings.constraint_severities) {
+            const row = document.querySelector(`#constraint-severity-table tbody tr[data-constraint-key="${key}"]`);
+            if (row) {
+                const select = row.querySelector('select');
+                if (select) {
+                    select.value = settings.constraint_severities[key];
+                }
+            }
+        }
+    }
+    // --- ✨ نهاية الإضافة --- ✨
 }
 
 function addSpecificRoomAssignmentRow(container, assignment = {}) {
@@ -2188,6 +2401,7 @@ function loadSettingsAndBuildUI() {
             // استعادة قيم الميزانيات ومدة الحظر
             document.getElementById('hh-time-budget-input').value = algo.hh_time_budget || 5;
             document.getElementById('hh-llh-iterations-input').value = algo.hh_llh_iterations || 30;
+            document.getElementById('hh-stagnation-limit-input').value = algo.hh_stagnation_limit || 15;
             document.getElementById('hh-tabu-tenure-input').value = algo.hh_tabu_tenure || 3;
 
             // استعادة الخوارزميات المختارة
@@ -2218,12 +2432,36 @@ function loadSettingsAndBuildUI() {
                 document.querySelectorAll('input[name="hh_llh_select"]').forEach(cb => cb.checked = true);
             }
             document.getElementById('max-sessions-per-day-select').value = algo.max_sessions_per_day || 'none';
+            document.getElementById('prioritize-primary-slots-cb').checked = algo.prioritize_primary || false;
+            document.getElementById('prefer-morning-slots-cb').checked = algo.prefer_morning_slots || false;
             if (algo.distribution_rule_type) {
                 document.querySelector(`input[name="distribution_rule_type"][value="${algo.distribution_rule_type}"]`).checked = true;
             }
             if (algo.consecutive_large_hall_rule) {
                 document.getElementById('consecutive-large-hall-select').value = algo.consecutive_large_hall_rule;
             }
+            if (algo.refinement_level) {
+                const refinementRadio = document.querySelector(`input[name="refinement_level"][value="${algo.refinement_level}"]`);
+                if (refinementRadio) {
+                    refinementRadio.checked = true;
+                }
+            }
+        }
+
+            if (settings.algorithm_settings && settings.algorithm_settings.refinement_selected_teachers) {
+            const selectedTeachers = settings.algorithm_settings.refinement_selected_teachers;
+            
+            // أولاً، قم بإلغاء تحديد الكل لضمان بداية نظيفة
+            document.querySelectorAll('input[name="refine_teacher"]').forEach(cb => cb.checked = false);
+            
+            // ثانياً، حدد فقط الأساتذة المحفوظين في الإعدادات
+            selectedTeachers.forEach(teacherName => {
+                // نستخدم CSS.escape للتعامل مع الأسماء التي قد تحتوي على رموز خاصة
+                const checkbox = document.querySelector(`input[name="refine_teacher"][value="${CSS.escape(teacherName)}"]`);
+                if (checkbox) {
+                    checkbox.checked = true;
+                }
+            });
         }
 
         if (settings.flexible_categories) {
@@ -2237,6 +2475,23 @@ function loadSettingsAndBuildUI() {
                 }
             }, 200); // تأخير بسيط لضمان أن كل شيء آخر قد تم تحميله
         }
+
+        // --- ✨ بداية الإضافة: استعادة إعدادات صرامة القيود عند بدء التشغيل --- ✨
+        if (settings.constraint_severities) {
+            // نستخدم تأخيرًا بسيطًا لضمان أن الجدول قد تم بناؤه بالكامل
+            setTimeout(() => {
+                for (const key in settings.constraint_severities) {
+                    const row = document.querySelector(`#constraint-severity-table tbody tr[data-constraint-key="${key}"]`);
+                    if (row) {
+                        const select = row.querySelector('select');
+                        if (select) {
+                            select.value = settings.constraint_severities[key];
+                        }
+                    }
+                }
+            }, 200); 
+        }
+        // --- ✨ نهاية الإضافة --- ✨
 
     })
     .catch(err => console.error("لم يتم العثور على إعدادات سابقة أو حدث خطأ.", err));

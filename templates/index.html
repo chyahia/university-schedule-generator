@@ -14,6 +14,15 @@
             <p>
                 هذا البرنامج هو نظام متكامل لإنشاء الجداول الدراسية الجامعية بشكل تلقائي. يقوم النظام بتوزيع مئات المواد على عشرات الأساتذة مع مراعاة مجموعة معقدة من القيود لإنتاج جدول دقيق وخالٍ من التعارضات.
             </p>
+            <h4>فلسفة عمل الخوارزمية</h4>
+            <p>
+                يفكر البرنامج مثل خبير؛ فهو يتبع دائمًا ثلاث خطوات بالترتيب لتحقيق أفضل نتيجة ممكنة:
+            </p>
+            <ol style="line-height: 1.8;">
+                <li><strong>ضمان مكان لكل محاضرة:</strong> الهدف الأول والأسمى هو توزيع كل المحاضرات المسندة.</li>
+                <li><strong>إزالة التعارضات المستحيلة:</strong> بعد ذلك، يركز كل جهده على حل الأخطاء الصارمة (مثل وجود أستاذ في مكانين بنفس الوقت).</li>
+                <li><strong>تحسين جودة الجداول:</strong> أخيرًا، وبعد ضمان جدول خالٍ من الأخطاء، يبدأ في تحسين القيود المرنة (مثل تجميع حصص الأستاذ وضغطها في الصباح).</li>
+            </ol>
             <h4>شرح المراحل الست:</h4>
             <ul>
                 <li><b>المرحلة 1: إدخال البيانات الأساسية:</b>
@@ -212,6 +221,12 @@
                         <strong>فرض الأولوية للفترات الأساسية:</strong> (للمواد ذات القاعات الكبيرة)
                     </label>
 
+                    <br> <label>
+                        <input type="checkbox" id="prefer-morning-slots-cb">
+                        <strong>نقل حصة الفترة الأخيرة إلى فترة أبكر مناسبة:</strong> 
+                        <small>(قد يبطئ البحث قليلاً)</small>
+                    </label>
+
                     <div style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 15px;">
                         <label>
                             <strong>الأساتذة المسموح لهم بالعمل يوم السبت (اختياري):</strong>
@@ -281,6 +296,164 @@
                             <button type="button" id="add-specific-room-assignment-btn" style="width: auto; padding: 8px 15px; margin-top: 10px;">+ إضافة تخصيص</button>
                         </div>
                     </div>
+
+                    <div style="margin-top: 20px; border-top: 2px solid #007bff; padding-top: 15px;">
+                        <h4 style="text-align: center; margin-bottom: 20px; font-size: 1.5em;"> نظرة عامة على القيود</h4>
+
+                        <div class="constraints-layout-container">
+
+                            <div class="constraint-column">
+                                <h4>🔒 قيود صارمة (ثابتة دائماً)</h4>
+                                <p class="description">هذه القيود أساسية لعمل البرنامج ولا يمكن تغييرها. أي خرق لها يعتبر خطأ فادحاً.</p>
+                                <ul>
+                                    <li>تعارض الأستاذ (نفس الأستاذ في نفس الوقت).</li>
+                                    <li>تعارض القاعة (نفس القاعة في نفس الوقت).</li>
+                                    <li>تعارض القاعة الكبيرة (أكثر من محاضرة في قاعة كبيرة).</li>
+                                    <li>تعارض المعرفات (مثل الأعمال الموجهة لنفس المستوى).</li>
+                                    <li>توزيع غير متناسق للمواد المشتركة.</li>
+                                    <li>خرق فترة الراحة العامة (مثل مساء الثلاثاء).</li>
+                                    <li>خرق قواعد الفترة الزمنية (مثل وضع مادة بقاعة كبيرة في فترة للقاعات الصغيرة فقط).</li>
+                                    <li>خرق قيد القاعة المخصصة لمستوى معين.</li>
+                                    <li>خرق قيد الأيام اليدوية للأستاذ.</li>
+                                </ul>
+                            </div>
+
+                            <div class="constraint-column">
+                                <h4>⚙️ قيود قابلة للتحكم (مرنة/صارمة)</h4>
+                                <p class="description">يمكنك تحديد مستوى الأهمية لهذه القيود. "المرن" هو تفضيل، و"الصارم" هو شرط إلزامي.</p>
+
+                                <table id="constraint-severity-table" class="management-table" style="width: 100%; text-align: right;">
+                                    <thead>
+                                        <tr>
+                                            <th style="width: 70%;">القيد</th>
+                                            <th>المستوى المحدد</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr data-constraint-key="distribution">
+                                            <td>قيد التوزيع (أيام متتالية/منفصلة)</td>
+                                            <td>
+                                                <select style="width: 100%; padding: 5px;">
+                                                    <option value="hard">صارم (إلزامي)</option>
+                                                    <option value="high">مهم جداً (عقوبة: 20)</option>
+                                                    <option value="medium">مهم (عقوبة: 10)</option>
+                                                    <option value="low" selected>تفضيل بسيط (عقوبة: 1)</option>
+                                                    <option value="disabled">غير مهم (معطل)</option>
+                                                </select>
+                                            </td>
+                                        </tr>
+                                        <tr data-constraint-key="saturday_work">
+                                            <td>قيد العمل يوم السبت</td>
+                                            <td>
+                                                <select style="width: 100%; padding: 5px;">
+                                                    <option value="hard">صارم (إلزامي)</option>
+                                                    <option value="high">مهم جداً (عقوبة: 20)</option>
+                                                    <option value="medium">مهم (عقوبة: 10)</option>
+                                                    <option value="low" selected>تفضيل بسيط (عقوبة: 1)</option>
+                                                    <option value="disabled">غير مهم (معطل)</option>
+                                                </select>
+                                            </td>
+                                        </tr>
+                                        <tr data-constraint-key="last_slot">
+                                            <td>قيد منع آخر الحصص</td>
+                                            <td>
+                                                <select style="width: 100%; padding: 5px;">
+                                                    <option value="hard">صارم (إلزامي)</option>
+                                                    <option value="high">مهم جداً (عقوبة: 20)</option>
+                                                    <option value="medium">مهم (عقوبة: 10)</option>
+                                                    <option value="low" selected>تفضيل بسيط (عقوبة: 1)</option>
+                                                    <option value="disabled">غير مهم (معطل)</option>
+                                                </select>
+                                            </td>
+                                        </tr>
+                                        <tr data-constraint-key="max_sessions">
+                                            <td>قيد الحد الأقصى للحصص اليومية</td>
+                                            <td>
+                                                <select style="width: 100%; padding: 5px;">
+                                                    <option value="hard">صارم (إلزامي)</option>
+                                                    <option value="high">مهم جداً (عقوبة: 20)</option>
+                                                    <option value="medium">مهم (عقوبة: 10)</option>
+                                                    <option value="low" selected>تفضيل بسيط (عقوبة: 1)</option>
+                                                    <option value="disabled">غير مهم (معطل)</option>
+                                                </select>
+                                            </td>
+                                        </tr>
+                                        <tr data-constraint-key="teacher_pairs">
+                                            <td>قيد اشتراك أزواج الأساتذة</td>
+                                            <td>
+                                                <select style="width: 100%; padding: 5px;">
+                                                    <option value="hard">صارم (إلزامي)</option>
+                                                    <option value="high">مهم جداً (عقوبة: 20)</option>
+                                                    <option value="medium">مهم (عقوبة: 10)</option>
+                                                    <option value="low" selected>تفضيل بسيط (عقوبة: 1)</option>
+                                                    <option value="disabled">غير مهم (معطل)</option>
+                                                </select>
+                                            </td>
+                                        </tr>
+                                        <tr data-constraint-key="consecutive_halls">
+                                            <td>قيد منع توالي القاعات الكبيرة</td>
+                                            <td>
+                                                <select style="width: 100%; padding: 5px;">
+                                                    <option value="hard">صارم (إلزامي)</option>
+                                                    <option value="high">مهم جداً (عقوبة: 20)</option>
+                                                    <option value="medium">مهم (عقوبة: 10)</option>
+                                                    <option value="low" selected>تفضيل بسيط (عقوبة: 1)</option>
+                                                    <option value="disabled">غير مهم (معطل)</option>
+                                                </select>
+                                            </td>
+                                        </tr>
+                                        <tr data-constraint-key="prefer_morning">
+                                            <td>قيد تفضيل الفترات الصباحية (ضغط الحصص)</td>
+                                            <td>
+                                                <select style="width: 100%; padding: 5px;">
+                                                    <option value="hard">صارم (إلزامي)</option>
+                                                    <option value="high">مهم جداً (عقوبة: 20)</option>
+                                                    <option value="medium">مهم (عقوبة: 10)</option>
+                                                    <option value="low" selected>تفضيل بسيط (عقوبة: 1)</option>
+                                                    <option value="disabled">غير مهم (معطل)</option>
+                                                </select>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                                <p style="text-align: center; font-size: 14px; color: #555; margin-top: 15px;">
+                                    <strong>ملاحظة:</strong> قيد "أوقات البدء والانتهاء" يصبح <strong>صارماً</strong> تلقائياً عند تحديد أيام عمل الأستاذ يدوياً، ويبقى <strong>مرناً</strong> عند ترك الأيام للتوزيع التلقائي.
+                                </p>
+                            </div>
+
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 15px;">
+                        <label>
+                            <strong>اختر الأساتذة لتطبيق التحسين على جداولهم (اختياري):</strong>
+                            <br>
+                            <small>(إذا لم تختر أحداً، فسيتم تجاهلهم عند الضغط على زر التحسين)</small>
+                        </label>
+                        <div style="margin-top: 10px; margin-bottom: 5px;">
+                            <button type="button" id="select-all-refine-teachers" style="width: auto; padding: 5px 10px; font-size: 12px; background-color: #6c757d;">تحديد الكل</button>
+                            <button type="button" id="deselect-all-refine-teachers" style="width: auto; padding: 5px 10px; font-size: 12px; background-color: #6c757d; margin-right: 5px;">إلغاء تحديد الكل</button>
+                        </div>
+                        <div id="refinement-teacher-selection-container" style="width: 100%; max-height: 200px; overflow-y: auto; border: 1px solid #ccc; border-radius: 4px; padding: 10px; background-color: white; margin-top: 10px;">
+                            </div>
+                            <div id="refinement-level-container" style="margin-top: 20px; border-top: 1px solid #ccc; padding-top: 15px;">
+                                <strong style="display: block; margin-bottom: 10px;">اختر مستوى التحسين:</strong>
+                                <div class="refinement-options">
+                                    <label>
+                                        <input type="radio" name="refinement_level" value="simple">
+                                        <strong>بسيط (سريع):</strong> يقبل النقلات التي تحسن النتيجة فقط.
+                                    </label>
+                                    <label>
+                                        <input type="radio" name="refinement_level" value="balanced" checked>
+                                        <strong>متوازن (موصى به):</strong> يقبل النقلات التي تحسن النتيجة أو تبقيها كما هي.
+                                    </label>
+                                    <label>
+                                        <input type="radio" name="refinement_level" value="deep">
+                                        <strong>عميق (أبطأ):</strong> يسمح أحياناً بنقلات أسوأ مؤقتاً للوصول لنتائج أفضل.
+                                    </label>
+                                </div>
+                            </div>
+                    </div>
                     </div>
                 <div class="setting-group" style="margin-top: 20px; padding-top: 20px; text-align: center; border-top: 2px solid #007bff;">
 
@@ -345,21 +518,21 @@
                         <strong>الخوارزمية الميميتيك (GA + بحث محلي):</strong> خوارزمية هجينة تجمع قوة الجينية مع دقة البحث المحلي.
                     </label>
                     <div id="memetic-algorithm-container" style="display: none; margin-top: 10px; margin-right: 25px;">
-                        
                         <label for="ma-population-input">حجم الجيل:</label>
                         <input type="number" id="ma-population-input" value="40" min="10" style="width: 80px; padding: 5px;">
-                        
+
                         <label for="ma-generations-input" style="margin-right: 15px;">عدد الأجيال:</label>
                         <input type="number" id="ma-generations-input" value="100" min="20" style="width: 80px; padding: 5px;">
-                        
+
                         <label for="ma-mutation-input" style="margin-right: 15px;">معدل الطفرة (%):</label>
                         <input type="number" id="ma-mutation-input" value="10" min="1" max="100" style="width: 80px; padding: 5px;">
-                        
+
                         <label for="ma-elitism-input" style="margin-right: 15px;">حجم النخبة:</label>
                         <input type="number" id="ma-elitism-input" value="2" min="1" style="width: 80px; padding: 5px;">
-                        
+
                         <label for="ma-local-search-iterations" style="margin-right: 15px;">تكرارات البحث المحلي:</label>
                         <input type="number" id="ma-local-search-iterations" value="5" min="1" max="50" style="width: 80px; padding: 5px;" title="عدد محاولات التحسين التي ستتم على كل حل جديد في كل جيل">
+                        
                     </div>
 
                     <br>
@@ -462,7 +635,8 @@
                     
                     </div>
 
-                    <div style="margin-top: 25px; padding: 15px; border: 2px solid #fd7e14; border-radius: 8px; background-color: #fff3e0;">
+                    
+                                        <div style="margin-top: 25px; padding: 15px; border: 2px solid #fd7e14; border-radius: 8px; background-color: #fff3e0;">
                         <label for="intensive-search-attempts" style="font-weight: bold; font-size: 17px; color: #d9534f;">
                             بحث مكثف (عدد المحاولات):
                         </label>
@@ -473,6 +647,7 @@
                     </div>  
                     <div style="margin-top: 25px;">
                         <button id="generate-schedule-button" style="width: auto; padding: 12px 30px; font-size: 18px;">🚀 إنشاء الجدول الآن</button>
+                        <button id="refine-schedule-btn" class="action-button" style="width: auto; padding: 12px 20px; font-size: 16px; background-color: #17a2b8; display: none;">🔄 تحسين وضغط الجدول</button>
                         <button id="stop-generation-button" class="action-button-stop" style="display: none;">🛑 إيقاف البحث</button>
                     </div>
                     <pre id="log-output" style="background-color: #111; color: #0f0; padding: 15px; border-radius: 5px; height: 300px; overflow-y: scroll; display: none;"></pre>
@@ -572,6 +747,15 @@
             <div class="management-panel">
                 <h4>قائمة المشاكل التي تم العثور عليها:</h4>
                 <div id="comprehensive-check-results-container">
+                    </div>
+            </div>
+        </section>
+
+        <section id="refinement-report-section" style="display: none; margin-top: 40px;">
+            <h2>تقرير مفصل لعملية تحسين الجدول</h2>
+            <div class="management-panel">
+                <h4>قائمة التحسينات التي تم إجراؤها:</h4>
+                <div id="refinement-log-container">
                     </div>
             </div>
         </section>
