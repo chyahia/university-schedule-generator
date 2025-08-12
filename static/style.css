@@ -1120,3 +1120,51 @@ button:active {
     right: 0;
     top: 2px;
 }
+
+/* =================================================== */
+/* === (جديد) تنسيقات قائمة التنقل الجانبية (Sidebar) === */
+/* =================================================== */
+
+#sidebar-nav {
+    position: fixed; /* تثبيت القائمة في الشاشة */
+    right: 0;
+    top: 0;
+    width: 220px; /* عرض القائمة الجانبية */
+    height: 100%;
+    background-color: #343a40; /* لون خلفية داكن */
+    padding-top: 20px;
+    z-index: 100; /* للتأكد من أنها فوق بقية العناصر */
+    box-shadow: -3px 0 8px rgba(0,0,0,0.2);
+}
+
+#sidebar-nav ul {
+    list-style-type: none;
+    padding: 0;
+    margin: 0;
+}
+
+#sidebar-nav li a {
+    display: block;
+    color: #f8f9fa; /* لون الخط */
+    padding: 15px 20px;
+    text-decoration: none;
+    font-size: 16px;
+    transition: background-color 0.3s, padding-right 0.3s;
+    border-bottom: 1px solid #495057;
+}
+
+#sidebar-nav li a:hover {
+    background-color: #007bff; /* تغيير اللون عند المرور */
+    padding-right: 25px; /* إضافة حركة بسيطة */
+}
+
+/* تعديل المحتوى الرئيسي لإفساح المجال للقائمة */
+main {
+    margin-right: 240px; /* مساحة للقائمة + هامش صغير */
+    max-width: 1200px;
+    margin-left: auto; /* إبقاء التوسيط الأفقي */
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}

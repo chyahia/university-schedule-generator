@@ -29,9 +29,28 @@ window.addEventListener('DOMContentLoaded', () => {
     setupDataImportExportListeners();
     setupSettingsManagementListeners();
     setupFlexCategoriesListeners();
+    setupSidebarNavigation();
 });
 
+function setupSidebarNavigation() {
+    const sidebar = document.getElementById('sidebar-nav');
+    if (!sidebar) return;
 
+    sidebar.addEventListener('click', function(event) {
+        // نتأكد أن العنصر المضغوط هو رابط <a>
+        if (event.target.tagName === 'A') {
+            event.preventDefault(); // منع القفز الفوري
+            const targetId = event.target.getAttribute('href');
+            const targetElement = document.querySelector(targetId);
+
+            if (targetElement) {
+                targetElement.scrollIntoView({
+                    behavior: 'smooth' // تفعيل التمرير الناعم
+                });
+            }
+        }
+    });
+}
 // =================================================================================
 // --- Core Data Loading and UI Generation ---
 // =================================================================================
