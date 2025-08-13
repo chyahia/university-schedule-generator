@@ -46,10 +46,44 @@ def get_base_path():
     else:
         return os.path.dirname(os.path.abspath(__file__))
 
-BASE_DIR = get_base_path()
-# تحديد مسار ملف قاعدة البيانات
-DATABASE_FILE = os.path.join(BASE_DIR, 'schedule_database.db')
-Q_TABLE_MEMORY_FILE = os.path.join(BASE_DIR, 'q_table_memory.json')
+# --- بداية الكود الجديد والمُحسَّن (يدعم كلا الملفين) ---
+import sys
+import shutil
+
+def get_writable_app_path(filename):
+    """
+    دالة مركزية لتحديد المسار الصحيح لأي ملف يحتاج إلى كتابة.
+    """
+    base_path = get_base_path()
+    local_file_path = os.path.join(base_path, filename)
+
+    # التحقق مما إذا كان البرنامج يعمل كملف تنفيذي مجمّد (exe)
+    if getattr(sys, 'frozen', False):
+        # التحقق مما إذا كان البرنامج يعمل من داخل مجلد Program Files
+        if 'program files' in base_path.lower():
+            APP_NAME = "ScheduleGenerator"
+            app_data_path = os.path.join(os.getenv('APPDATA'), APP_NAME)
+            os.makedirs(app_data_path, exist_ok=True)
+            
+            writable_file_path = os.path.join(app_data_path, filename)
+
+            # عند أول تشغيل، انسخ الملف النموذجي (إذا كان موجوداً)
+            if not os.path.exists(writable_file_path):
+                if os.path.exists(local_file_path):
+                    shutil.copy2(local_file_path, writable_file_path)
+            
+            return writable_file_path
+        else:
+            # البرنامج يعمل كـ exe ولكنه ليس في Program Files
+            return local_file_path
+    else:
+        # إذا كنا في بيئة التطوير
+        return local_file_path
+
+# استدعاء الدالة الجديدة لتحديد مسار كل ملف
+DATABASE_FILE = get_writable_app_path('schedule_database.db')
+Q_TABLE_MEMORY_FILE = get_writable_app_path('q_table_memory.json')
+# --- نهاية الكود الجديد والمُحسَّن ---
 
 def get_db_connection():
     """
@@ -1070,7 +1104,7 @@ def calculate_fitness(schedule, all_lectures, days, slots, teachers, rooms_data,
 
 
 # النسخة النهائية والمكتملة للخوارزمية الجينية
-def run_genetic_algorithm(log_q, lectures_to_schedule, days, slots, rooms_data, teachers, all_levels, identifiers_by_level, special_constraints, teacher_constraints, distribution_rule_type, lectures_by_teacher_map, globally_unavailable_slots, saturday_teachers, teacher_pairs, day_to_idx, ga_population_size, ga_generations, ga_mutation_rate, ga_elitism_count, rules_grid, scheduling_state, last_slot_restrictions, level_specific_large_rooms, specific_small_room_assignments, constraint_severities, max_sessions_per_day=None, initial_solution_seed=None, consecutive_large_hall_rule="none", progress_channel=None, prefer_morning_slots=False):
+def run_genetic_algorithm(log_q, lectures_to_schedule, days, slots, rooms_data, teachers, all_levels, identifiers_by_level, special_constraints, teacher_constraints, distribution_rule_type, lectures_by_teacher_map, globally_unavailable_slots, saturday_teachers, teacher_pairs, day_to_idx, ga_population_size, ga_generations, ga_mutation_rate, ga_elitism_count, rules_grid, scheduling_state, last_slot_restrictions, level_specific_large_rooms, specific_small_room_assignments, constraint_severities, max_sessions_per_day=None, initial_solution_seed=None, consecutive_large_hall_rule="none", progress_channel=None, prefer_morning_slots=False, mutation_hard_intensity=3, mutation_soft_probability=0.5):
     
     
     log_q.put('--- بدء الخوارزمية الجينية ---')
@@ -1180,7 +1214,9 @@ def run_genetic_algorithm(log_q, lectures_to_schedule, days, slots, rooms_data, 
                     teacher_constraints, special_constraints, identifiers_by_level, rules_grid, lectures_by_teacher_map,
                     globally_unavailable_slots, saturday_teachers, day_to_idx, 
                     level_specific_large_rooms, specific_small_room_assignments, constraint_severities, consecutive_large_hall_rule, 
-                    prefer_morning_slots
+                    prefer_morning_slots,
+                    extra_teachers_on_hard_error=mutation_hard_intensity,
+                    soft_error_shake_probability=mutation_soft_probability
                 )
                 next_generation.append(mutated_child1)
             else:
@@ -1194,7 +1230,9 @@ def run_genetic_algorithm(log_q, lectures_to_schedule, days, slots, rooms_data, 
                         teacher_constraints, special_constraints, identifiers_by_level, rules_grid, lectures_by_teacher_map,
                         globally_unavailable_slots, saturday_teachers, day_to_idx, 
                         level_specific_large_rooms, specific_small_room_assignments, constraint_severities, consecutive_large_hall_rule, 
-                        prefer_morning_slots
+                        prefer_morning_slots,
+                        extra_teachers_on_hard_error=mutation_hard_intensity,
+                        soft_error_shake_probability=mutation_soft_probability
                     )
                     next_generation.append(mutated_child2)
                 else:
@@ -1794,7 +1832,7 @@ def run_error_driven_local_search(
 # =====================================================================
 # START: MEMETIC ALGORITHM (ENHANCED VERSION)
 # =====================================================================
-def run_memetic_algorithm(log_q, lectures_to_schedule, days, slots, rooms_data, teachers, all_levels, identifiers_by_level, special_constraints, teacher_constraints, distribution_rule_type, lectures_by_teacher_map, globally_unavailable_slots, saturday_teachers, teacher_pairs, day_to_idx, rules_grid, prioritize_primary, ma_population_size, ma_generations, ma_mutation_rate, ma_elitism_count, ma_local_search_iterations, scheduling_state, last_slot_restrictions, level_specific_large_rooms, specific_small_room_assignments, constraint_severities, max_sessions_per_day=None, initial_solution_seed=None, consecutive_large_hall_rule="none", progress_channel=None, prefer_morning_slots=False):
+def run_memetic_algorithm(log_q, lectures_to_schedule, days, slots, rooms_data, teachers, all_levels, identifiers_by_level, special_constraints, teacher_constraints, distribution_rule_type, lectures_by_teacher_map, globally_unavailable_slots, saturday_teachers, teacher_pairs, day_to_idx, rules_grid, prioritize_primary, ma_population_size, ma_generations, ma_mutation_rate, ma_elitism_count, ma_local_search_iterations, scheduling_state, last_slot_restrictions, level_specific_large_rooms, specific_small_room_assignments, constraint_severities, max_sessions_per_day=None, initial_solution_seed=None, consecutive_large_hall_rule="none", progress_channel=None, prefer_morning_slots=False, mutation_hard_intensity=3, mutation_soft_probability=0.5):
 
     log_q.put('--- بدء الخوارزمية الميميتيك (GA + LS) ---')
 
@@ -1883,7 +1921,9 @@ def run_memetic_algorithm(log_q, lectures_to_schedule, days, slots, rooms_data, 
                     teacher_constraints, special_constraints, identifiers_by_level, rules_grid, lectures_by_teacher_map,
                     globally_unavailable_slots, saturday_teachers, day_to_idx, 
                     level_specific_large_rooms, specific_small_room_assignments, constraint_severities, consecutive_large_hall_rule, 
-                    prefer_morning_slots
+                    prefer_morning_slots,
+                    extra_teachers_on_hard_error=mutation_hard_intensity,
+                    soft_error_shake_probability=mutation_soft_probability
                 )
             else:
                 mutated_child1 = child1
@@ -1904,7 +1944,9 @@ def run_memetic_algorithm(log_q, lectures_to_schedule, days, slots, rooms_data, 
                         teacher_constraints, special_constraints, identifiers_by_level, rules_grid, lectures_by_teacher_map,
                         globally_unavailable_slots, saturday_teachers, day_to_idx, 
                         level_specific_large_rooms, specific_small_room_assignments, constraint_severities, consecutive_large_hall_rule, 
-                        prefer_morning_slots
+                        prefer_morning_slots,
+                        extra_teachers_on_hard_error=mutation_hard_intensity,
+                        soft_error_shake_probability=mutation_soft_probability
                     )
                 else:
                     mutated_child2 = child2
@@ -2067,6 +2109,8 @@ def mutate(
     globally_unavailable_slots, saturday_teachers, day_to_idx, 
     level_specific_large_rooms, specific_small_room_assignments, constraint_severities, consecutive_large_hall_rule, 
     prefer_morning_slots,
+    extra_teachers_on_hard_error,
+    soft_error_shake_probability,
     mutation_intensity=1.0  # معامل شدة الطفرة
     ):
     """
@@ -2077,11 +2121,11 @@ def mutate(
     """
     # ================= ✨ إعدادات قوة الطفرة (يمكن تعديلها) ✨ =================
     # عدد الأساتذة العشوائيين الإضافيين الذين سيتم هزهم عند وجود خطأ صعب
-    extra_teachers_on_hard_error = 2 
+    # extra_teachers_on_hard_error = 3 
     
     # ✨ معامل جديد للتحكم في احتمالية الهزة الإضافية عند وجود خطأ بسيط ✨
     # (القيمة تكون بين 0.0 و 1.0. مثلاً: 0.5 = 50%، و 0.0 = تعطيل الميزة)
-    soft_error_shake_probability = 0.5 
+    # soft_error_shake_probability = 0.5 
     # =========================================================================
 
     mutated_schedule = copy.deepcopy(schedule)
@@ -2189,6 +2233,8 @@ def generate_schedule():
             
             # --- الآن نقرأ كل الإعدادات من الكائنات الصحيحة ---
             intensive_attempts = int(algorithm_settings.get('intensive_search_attempts', 1))
+            mutation_hard_intensity = int(algorithm_settings.get('mutation_hard_error_intensity', 3))
+            mutation_soft_probability = float(algorithm_settings.get('mutation_soft_error_probability', 0.5))
             max_sessions_per_day_str = algorithm_settings.get('max_sessions_per_day', 'none')
             max_sessions_per_day = int(max_sessions_per_day_str) if max_sessions_per_day_str.isdigit() else None
             
@@ -2572,7 +2618,8 @@ def generate_schedule():
                             ga_generations, ga_mutation_rate, ga_elitism_count, rules_grid,
                             scheduling_state, last_slot_restrictions, level_specific_large_rooms,
                             specific_small_room_assignments, constraint_severities, initial_solution_seed=greedy_initial_schedule,
-                            max_sessions_per_day=max_sessions_per_day, consecutive_large_hall_rule=consecutive_large_hall_rule, prefer_morning_slots=prefer_morning_slots
+                            max_sessions_per_day=max_sessions_per_day, consecutive_large_hall_rule=consecutive_large_hall_rule, prefer_morning_slots=prefer_morning_slots,
+                            mutation_hard_intensity=mutation_hard_intensity, mutation_soft_probability=mutation_soft_probability
                         )
                         
                         if final_cost > 0:
@@ -2752,7 +2799,8 @@ def generate_schedule():
                             day_to_idx, rules_grid, prioritize_primary, ma_population_size, ma_generations, 
                             ma_mutation_rate, ma_elitism_count, ma_local_search_iterations,
                             scheduling_state, last_slot_restrictions, level_specific_large_rooms, specific_small_room_assignments, constraint_severities,
-                            initial_solution_seed=greedy_initial_schedule, max_sessions_per_day=max_sessions_per_day, consecutive_large_hall_rule=consecutive_large_hall_rule, prefer_morning_slots=prefer_morning_slots
+                            initial_solution_seed=greedy_initial_schedule, max_sessions_per_day=max_sessions_per_day, consecutive_large_hall_rule=consecutive_large_hall_rule, prefer_morning_slots=prefer_morning_slots,
+                            mutation_hard_intensity=mutation_hard_intensity, mutation_soft_probability=mutation_soft_probability
                         )
 
                         if final_cost > 0:
@@ -2787,7 +2835,8 @@ def generate_schedule():
                             day_to_idx, rules_grid, clonalg_population_size, clonalg_generations, 
                             clonalg_selection_size, clonalg_clone_factor,
                             scheduling_state, last_slot_restrictions, level_specific_large_rooms, specific_small_room_assignments, constraint_severities,
-                            initial_solution_seed=greedy_initial_schedule, max_sessions_per_day=max_sessions_per_day, consecutive_large_hall_rule=consecutive_large_hall_rule, prefer_morning_slots=prefer_morning_slots
+                            initial_solution_seed=greedy_initial_schedule, max_sessions_per_day=max_sessions_per_day, consecutive_large_hall_rule=consecutive_large_hall_rule, prefer_morning_slots=prefer_morning_slots,
+                            mutation_hard_intensity=mutation_hard_intensity, mutation_soft_probability=mutation_soft_probability
                         )
 
                         if final_cost > 0:
@@ -4697,7 +4746,7 @@ def run_vns_with_flex_assignments(
 # =====================================================================
 # START: CLONAL SELECTION ALGORITHM (CLONALG)
 # =====================================================================
-def run_clonalg(log_q, lectures_to_schedule, days, slots, rooms_data, teachers, all_levels, identifiers_by_level, special_constraints, teacher_constraints, distribution_rule_type, lectures_by_teacher_map, globally_unavailable_slots, saturday_teachers, teacher_pairs, day_to_idx, rules_grid, population_size, generations, selection_size, clone_factor, scheduling_state, last_slot_restrictions, level_specific_large_rooms, specific_small_room_assignments, constraint_severities, max_sessions_per_day=None, initial_solution_seed=None, consecutive_large_hall_rule="none", progress_channel=None, prefer_morning_slots=False):
+def run_clonalg(log_q, lectures_to_schedule, days, slots, rooms_data, teachers, all_levels, identifiers_by_level, special_constraints, teacher_constraints, distribution_rule_type, lectures_by_teacher_map, globally_unavailable_slots, saturday_teachers, teacher_pairs, day_to_idx, rules_grid, population_size, generations, selection_size, clone_factor, scheduling_state, last_slot_restrictions, level_specific_large_rooms, specific_small_room_assignments, constraint_severities, max_sessions_per_day=None, initial_solution_seed=None, consecutive_large_hall_rule="none", progress_channel=None, prefer_morning_slots=False, mutation_hard_intensity=3, mutation_soft_probability=0.5):
     
     log_q.put('--- بدء خوارزمية التحسين بالاستنساخ (CLONALG) ---')
 
@@ -4807,7 +4856,9 @@ def run_clonalg(log_q, lectures_to_schedule, days, slots, rooms_data, teachers, 
                     teacher_constraints, special_constraints, identifiers_by_level, rules_grid, lectures_by_teacher_map,
                     globally_unavailable_slots, saturday_teachers, day_to_idx, 
                     level_specific_large_rooms, specific_small_room_assignments, constraint_severities, consecutive_large_hall_rule, 
-                    prefer_morning_slots, mutation_intensity=intensity
+                    prefer_morning_slots, mutation_intensity=intensity,
+                    extra_teachers_on_hard_error=mutation_hard_intensity,
+                    soft_error_shake_probability=mutation_soft_probability
                 )
                 cloned_and_mutated_antibodies.append(mutated_clone)
 

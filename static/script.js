@@ -426,6 +426,8 @@ function collectAllCurrentSettings() {
         ma_elitism_count: document.getElementById('ma-elitism-input').value,
         ma_local_search_iterations: document.getElementById('ma-local-search-iterations').value,
         clonalg_population_size: document.getElementById('clonalg-population-input').value,
+        mutation_hard_error_intensity: document.getElementById('mutation-hard-error-intensity').value,
+        mutation_soft_error_probability: (parseFloat(document.getElementById('mutation-soft-error-probability').value) / 100.0).toString(),
         clonalg_generations: document.getElementById('clonalg-generations-input').value,
         clonalg_selection_size: document.getElementById('clonalg-selection-input').value,
         clonalg_clone_factor: document.getElementById('clonalg-clone-factor-input').value,
@@ -2442,6 +2444,8 @@ function loadSettingsAndBuildUI() {
             document.getElementById('clonalg-generations-input').value = algo.clonalg_generations || 100;
             document.getElementById('clonalg-selection-input').value = algo.clonalg_selection_size || 10;
             document.getElementById('clonalg-clone-factor-input').value = algo.clonalg_clone_factor || 1.0;
+            document.getElementById('mutation-hard-error-intensity').value = algo.mutation_hard_error_intensity || 3;
+            document.getElementById('mutation-soft-error-probability').value = (parseFloat(algo.mutation_soft_error_probability || 0.5) * 100.0);
             document.getElementById('hh-iterations-input').value = algo.hh_iterations || 50;
             if (algo.hh_budget_mode) {
                 const budgetRadio = document.querySelector(`input[name="hh_budget_mode"][value="${algo.hh_budget_mode}"]`);
