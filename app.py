@@ -5395,6 +5395,114 @@ def shutdown():
 def open_browser():
       webbrowser.open_new('http://127.0.0.1:5000/')
 
+@app.route('/api/validate-manual-move', methods=['POST'])
+def validate_manual_move():
+    try:
+        data = request.get_json()
+        lecture_id = data.get('lecture_id')
+        target_day_idx = data.get('target_day_idx')
+        target_slot_idx = data.get('target_slot_idx')
+        current_schedule = data.get('current_schedule')
+        settings = data.get('settings')
+
+        if any(v is None for v in [lecture_id, target_day_idx, target_slot_idx, current_schedule, settings]):
+            return jsonify({"isValid": False, "reason": "بيانات التحقق غير كاملة."}), 400
+
+        # 1. جلب كل البيانات اللازمة
+        all_courses = get_courses().get_json()
+        rooms_data = get_rooms().get_json()
+        all_levels = get_levels().get_json()
+        
+        # البحث عن تفاصيل المحاضرة التي يتم نقلها
+        lecture_to_move = next((c for c in all_courses if c.get('id') == lecture_id), None)
+        if not lecture_to_move:
+            return jsonify({"isValid": False, "reason": "لم يتم العثور على المحاضرة."}), 404
+
+        # 2. تحضير القيود والإعدادات (كما في دالة الجدولة)
+        days, _, day_to_idx, _, rules_grid = process_schedule_structure(settings.get('schedule_structure', {}))
+        phase_5_settings = settings.get('phase_5_settings', {})
+        special_constraints = phase_5_settings.get('special_constraints', {})
+        teacher_constraints = {t['name']: {} for t in get_teachers().get_json()}
+        for teacher, days_list in phase_5_settings.get('manual_days', {}).items():
+            if teacher in teacher_constraints:
+                teacher_constraints[teacher]['allowed_days'] = {day_to_idx.get(d) for d in days_list if d in day_to_idx}
+        
+        identifiers_row = query_db('SELECT value FROM settings WHERE key = ?', ('non_repetition_identifiers',), one=True)
+        identifiers_by_level = json.loads(identifiers_row['value']) if identifiers_row and identifiers_row.get('value') else {}
+        
+        # 3. بناء جداول مؤقتة للأساتذة والقاعات من الجدول الحالي (مع إزالة المحاضرة المنقولة)
+        temp_teacher_schedule = defaultdict(set)
+        temp_room_schedule = defaultdict(set)
+        for level_grid in current_schedule.values():
+            for d_idx, day_slots in enumerate(level_grid):
+                for s_idx, lectures_in_slot in enumerate(day_slots):
+                    for lec in lectures_in_slot:
+                        # نتجاهل المحاضرة التي نقوم بنقلها حالياً
+                        if lec.get('id') == lecture_id:
+                            continue
+                        if lec.get('teacher_name'):
+                            temp_teacher_schedule[lec.get('teacher_name')].add((d_idx, s_idx))
+                        if lec.get('room'):
+                            temp_room_schedule[lec.get('room')].add((d_idx, s_idx))
+        
+        # 4. استدعاء دالة التحقق الرئيسية
+        is_valid, result = is_placement_valid(
+            lecture=lecture_to_move, 
+            day_idx=target_day_idx, 
+            slot_idx=target_slot_idx,
+            final_schedule=current_schedule, # نمرر الجدول الكامل للتحقق من تعارضات المستوى
+            teacher_schedule=temp_teacher_schedule, # نمرر الجدول المؤقت للتحقق من تعارض الأستاذ
+            room_schedule=temp_room_schedule,      # نمرر الجدول المؤقت للتحقق من تعارض القاعات
+            teacher_constraints=teacher_constraints, 
+            special_constraints=special_constraints, 
+            identifiers_by_level=identifiers_by_level, 
+            rules_grid=rules_grid, 
+            globally_unavailable_slots=set(), 
+            rooms_data=rooms_data,
+            saturday_teachers=phase_5_settings.get('saturday_teachers', []), 
+            day_to_idx=day_to_idx,
+            level_specific_large_rooms=phase_5_settings.get('level_specific_large_rooms', {}),
+            specific_small_room_assignments=phase_5_settings.get('specific_small_room_assignments', {}),
+            consecutive_large_hall_rule=settings.get('algorithm_settings', {}).get('consecutive_large_hall_rule', 'none')
+        )
+
+        if is_valid:
+            return jsonify({"isValid": True, "room": result})
+        else:
+            # --- بداية الترجمة ---
+            # result هنا يحتوي على سبب الفشل باللغة الإنجليزية
+            reason_in_english = str(result)
+            reason_in_arabic = "سبب غير معروف" # قيمة افتراضية
+
+            # قاموس للترجمة
+            translation_map = {
+                "Slot unavailable for teacher or general rest period": "الفترة الزمنية غير متاحة (إما بسبب تعارض مع الأستاذ أو أنها فترة راحة عامة).",
+                "Manual day constraint violation": "خرق قيد الأيام اليدوية (الأستاذ لا يجب أن يعمل في هذا اليوم).",
+                "Manual start time violation": "خرق قيد وقت البدء المحدد يدوياً.",
+                "Manual end time violation": "خرق قيد وقت الإنهاء المحدد يدوياً.",
+                "Start time violation": "خرق قيد تفضيل وقت البدء.",
+                "No valid and available room found": "لا توجد قاعة صالحة وشاغرة في هذه الفترة الزمنية لهذه المحاضرة.",
+                "الأستاذ غير مسموح له بالعمل يوم السبت": "الأستاذ غير مسموح له بالعمل يوم السبت." # هذا مترجم بالفعل
+            }
+
+            # البحث عن أول تطابق في القاموس
+            for key, value in translation_map.items():
+                if key in reason_in_english:
+                    reason_in_arabic = value
+                    break
+            
+            # معالجة حالة خاصة لرسالة توالي القاعات
+            if "Consecutive large hall violation" in reason_in_english:
+                room_name = reason_in_english.split("room ")[-1]
+                reason_in_arabic = f"خرق قيد منع التوالي في القاعة الكبيرة '{room_name}'."
+            
+            return jsonify({"isValid": False, "reason": reason_in_arabic})
+            # --- نهاية الترجمة ---
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"isValid": False, "reason": f"خطأ في الخادم: {str(e)}"}), 500
+
 if __name__ == '__main__':
     # --- بداية التعديل ---
     # إنشاء سياق تطبيق يدويًا لتهيئة قاعدة البيانات

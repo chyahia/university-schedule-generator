@@ -16,6 +16,7 @@ let availableLevelsForBuilder = [];
 let availableLargeRooms = [];
 let allAvailableTeachers = [];
 let allAvailableCourses = [];
+let isManualEditModeActive = false;
 
 // =================================================================================
 // --- Initial Setup on Page Load ---
@@ -29,6 +30,7 @@ window.addEventListener('DOMContentLoaded', () => {
     setupDataImportExportListeners();
     setupSettingsManagementListeners();
     setupFlexCategoriesListeners();
+    setupSidebarToggle();
     setupSidebarNavigation();
 });
 
@@ -50,6 +52,18 @@ function setupSidebarNavigation() {
             }
         }
     });
+}
+
+function setupSidebarToggle() {
+    const toggleBtn = document.getElementById('sidebar-toggle-btn');
+    const sidebar = document.getElementById('sidebar-nav');
+
+    if (toggleBtn && sidebar) {
+        toggleBtn.addEventListener('click', () => {
+            sidebar.classList.toggle('sidebar-visible');
+            document.body.classList.toggle('body-sidebar-visible');
+        });
+    }
 }
 // =================================================================================
 // --- Core Data Loading and UI Generation ---
@@ -1484,6 +1498,13 @@ function displaySchedules(scheduleData, days, slots) {
         }
     });
     buttonsContainer.appendChild(toggleFreeRoomsBtn);
+    const manualEditBtn = document.createElement('button');
+    manualEditBtn.id = 'toggle-manual-edit-btn';
+    manualEditBtn.textContent = '✏️ تفعيل التعديل اليدوي';
+    manualEditBtn.style.backgroundColor = '#ffc107';
+    manualEditBtn.style.color = '#212529';
+    manualEditBtn.addEventListener('click', toggleManualEditingMode);
+    buttonsContainer.appendChild(manualEditBtn);
     
     outputDiv.appendChild(buttonsContainer);
 
@@ -1507,18 +1528,30 @@ function displaySchedules(scheduleData, days, slots) {
         days.forEach(day => headerRow.innerHTML += `<th>${day}</th>`);
         const tbody = table.createTBody();
         slots.forEach((slot, slotIdx) => {
+            const allAvailableCourses = window.allAvailableCourses || []; // تأكد من توفر المتغير
             const row = tbody.insertRow();
             row.insertCell().innerHTML = `<strong>${slot}</strong>`;
             days.forEach((day, dayIdx) => {
                 const cell = row.insertCell();
+                cell.dataset.dayIdx = dayIdx;
+                cell.dataset.slotIdx = slotIdx;
                 const lecturesInCell = grid[dayIdx] ? grid[dayIdx][slotIdx] : [];
                 if (lecturesInCell && lecturesInCell.length > 0) {
                     cell.innerHTML = lecturesInCell.map(lec => {
                         // ✨ نتحقق إذا كانت المادة ضمن قائمة المبدلين
                         const isSwapped = currentScheduleData.swapped_ids.includes(lec.id);
                         // ✨ نضيف كلاس 'swapped' إذا تحقق الشرط
+                        // ✨ نجمع كل المستويات لهذه المحاضرة في نص واحد
+                        const allLevelsForLec = allAvailableCourses.find(c => c.id === lec.id)?.levels.join(',') || '';
+                        
                         return `
-                            <div class="lecture-cell ${isSwapped ? 'swapped' : ''}">
+                            <div id="lec-${lec.id}" 
+                                 class="lecture-cell ${isSwapped ? 'swapped' : ''}" 
+                                 draggable="false" 
+                                 data-lecture-id="${lec.id}"
+                                 data-original-day="${dayIdx}"
+                                 data-original-slot="${slotIdx}"
+                                 data-levels="${allLevelsForLec}">
                                 <strong>${lec.name}</strong>
                                 <span>${lec.teacher_name}</span>
                                 <small>${lec.room}</small>
@@ -2989,4 +3022,164 @@ function populateConsecutiveHallDropdown() {
         option.textContent = `منع التوالي في ( ${room.name} ) فقط`;
         select.appendChild(option);
     });
+}
+
+// =======================================================
+// --- دوال خاصة بوضع التعديل اليدوي (Drag & Drop) ---
+// =======================================================
+
+function toggleManualEditingMode() {
+    isManualEditModeActive = !isManualEditModeActive;
+    const btn = document.getElementById('toggle-manual-edit-btn');
+    const allCells = document.querySelectorAll('.schedule-table td');
+    const allLectures = document.querySelectorAll('.lecture-cell');
+
+    if (isManualEditModeActive) {
+        btn.textContent = '✅ إنهاء التعديل اليدوي';
+        btn.style.backgroundColor = '#28a745'; // أخضر
+        allCells.forEach(cell => {
+            cell.classList.add('drop-target');
+            cell.addEventListener('dragover', handleDragOver);
+            cell.addEventListener('dragleave', handleDragLeave);
+            cell.addEventListener('drop', handleDrop);
+        });
+        allLectures.forEach(lec => {
+            lec.draggable = true;
+            lec.addEventListener('dragstart', handleDragStart);
+            lec.addEventListener('dragend', handleDragEnd);
+        });
+    } else {
+        btn.textContent = '✏️ تفعيل التعديل اليدوي';
+        btn.style.backgroundColor = '#ffc107'; // أصفر
+        allCells.forEach(cell => {
+            cell.classList.remove('drop-target', 'drag-over');
+            cell.removeEventListener('dragover', handleDragOver);
+            cell.removeEventListener('dragleave', handleDragLeave);
+            cell.removeEventListener('drop', handleDrop);
+        });
+        allLectures.forEach(lec => {
+            lec.draggable = false;
+            lec.removeEventListener('dragstart', handleDragStart);
+            lec.removeEventListener('dragend', handleDragEnd);
+        });
+    }
+}
+
+function handleDragStart(e) {
+    e.dataTransfer.setData('text/plain', e.target.id);
+    e.target.classList.add('dragging');
+}
+
+function handleDragEnd(e) {
+    e.target.classList.remove('dragging');
+}
+
+function handleDragOver(e) {
+    e.preventDefault();
+    e.currentTarget.classList.add('drag-over');
+}
+
+function handleDragLeave(e) {
+    e.currentTarget.classList.remove('drag-over');
+}
+
+async function handleDrop(e) {
+    e.preventDefault();
+    e.currentTarget.classList.remove('drag-over');
+
+    const draggedElementId = e.dataTransfer.getData('text/plain');
+    const draggedElement = document.getElementById(draggedElementId);
+    if (!draggedElement) return;
+
+    const lectureId = parseInt(draggedElement.dataset.lectureId, 10);
+    const targetDayIdx = parseInt(e.currentTarget.dataset.dayIdx, 10);
+    const targetSlotIdx = parseInt(e.currentTarget.dataset.slotIdx, 10);
+    const originalDay = parseInt(draggedElement.dataset.originalDay, 10);
+    const originalSlot = parseInt(draggedElement.dataset.originalSlot, 10);
+
+    if (originalDay === targetDayIdx && originalSlot === targetSlotIdx) {
+        return; // لم يتم النقل إلى مكان جديد
+    }
+    
+    // إظهار مؤشر التحميل
+    const dropTarget = e.currentTarget;
+    dropTarget.innerHTML = '<span class="loader">🔄</span>';
+
+    const payload = {
+        lecture_id: lectureId,
+        target_day_idx: targetDayIdx,
+        target_slot_idx: targetSlotIdx,
+        current_schedule: currentScheduleData.schedule,
+        settings: collectAllCurrentSettings()
+    };
+
+    try {
+        const response = await fetch('/api/validate-manual-move', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const result = await response.json();
+
+        if (result.isValid) {
+            // --- تحديث الحالة في الواجهة الأمامية ---
+            // 1. إيجاد تفاصيل المحاضرة الكاملة
+            const lectureDetails = findLectureInSchedule(lectureId);
+            if (!lectureDetails) throw new Error("لم يتم العثور على تفاصيل المحاضرة.");
+            
+            // 2. حذف المحاضرة من موقعها القديم
+            lectureDetails.levels.forEach(levelName => {
+                const originalSlotList = currentScheduleData.schedule[levelName][originalDay][originalSlot];
+                currentScheduleData.schedule[levelName][originalDay][originalSlot] = originalSlotList.filter(l => l.id !== lectureId);
+            });
+
+            // 3. إضافة المحاضرة إلى موقعها الجديد مع القاعة الجديدة
+            const newLectureData = { ...lectureDetails.lecture, room: result.room };
+            lectureDetails.levels.forEach(levelName => {
+                currentScheduleData.schedule[levelName][targetDayIdx][targetSlotIdx].push(newLectureData);
+            });
+            
+            // 4. إعادة رسم الجدول بالكامل
+            displaySchedules(currentScheduleData.schedule, currentScheduleData.days, currentScheduleData.slots);
+            // إعادة تفعيل وضع التعديل للحفاظ على الحالة
+            isManualEditModeActive = false; // لإعادة ضبط الحالة قبل التفعيل
+            toggleManualEditingMode();
+
+        } else {
+            alert(`فشل النقل: ${result.reason}`);
+            // إعادة رسم الجدول لإزالة مؤشر التحميل واستعادة الحالة الأصلية
+            displaySchedules(currentScheduleData.schedule, currentScheduleData.days, currentScheduleData.slots);
+            isManualEditModeActive = false;
+            toggleManualEditingMode();
+        }
+    } catch (error) {
+        console.error("خطأ في عملية النقل:", error);
+        alert("حدث خطأ غير متوقع أثناء محاولة نقل المحاضرة.");
+        displaySchedules(currentScheduleData.schedule, currentScheduleData.days, currentScheduleData.slots);
+        isManualEditModeActive = false;
+        toggleManualEditingMode();
+    }
+}
+
+// دالة مساعدة لإيجاد تفاصيل المحاضرة من الجدول الحالي
+function findLectureInSchedule(lectureId) {
+    for (const levelName in currentScheduleData.schedule) {
+        const grid = currentScheduleData.schedule[levelName];
+        for (let day_idx = 0; day_idx < grid.length; day_idx++) {
+            for (let slot_idx = 0; slot_idx < grid[day_idx].length; slot_idx++) {
+                const lecture = grid[day_idx][slot_idx].find(l => l.id === lectureId);
+                if (lecture) {
+                    // نستخدم allAvailableCourses للحصول على قائمة المستويات الكاملة
+                    const fullCourseDetails = allAvailableCourses.find(c => c.id === lectureId);
+                    return {
+                        lecture: lecture,
+                        levels: fullCourseDetails ? fullCourseDetails.levels : [],
+                        day: day_idx,
+                        slot: slot_idx
+                    };
+                }
+            }
+        }
+    }
+    return null;
 }
