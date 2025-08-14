@@ -480,6 +480,17 @@
                     <button id="save-settings-button" class="action-button" style="width: auto; padding: 10px 20px; background-color: #0d6efd;">💾 حفظ الإعدادات</button>
                     
                     <div style="margin: 20px 0; border: 1px dashed #ccc; padding: 15px; border-radius: 6px;">
+                        <div style="margin: 20px 0; border: 1px dashed #28a745; padding: 15px; border-radius: 6px; background-color: #f0fff4;">
+                        <label for="strict-hierarchy-cb" style="cursor: pointer; font-size: 16px; font-weight: bold; display: block;">
+                            <input type="checkbox" id="strict-hierarchy-cb" style="width: auto; vertical-align: middle; margin-left: 10px;">
+                            تفعيل التسلسل الهرمي الصارم للأخطاء
+                        </label>
+                        <small style="display: block; margin-top: 5px; margin-right: 25px; color: #555;">
+                            (عند تفعيله، يجب على الخوارزمية حل كل الأخطاء الصارمة أولاً قبل الالتفات للأخطاء المرنة).
+                        </small>
+                    </div>
+                    <div style="margin: 20px 0; border: 1px dashed #ccc; padding: 15px; border-radius: 6px;">
+                        
                         <h4>5. اختر طريقة البحث عن حل:</h4>
                         <label style="cursor: pointer; font-size: 16px;">
                             <input type="radio" name="scheduling_method" value="greedy" checked>

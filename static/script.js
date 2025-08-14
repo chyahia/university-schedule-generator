@@ -408,6 +408,7 @@ function collectAllCurrentSettings() {
     
     const algorithm_settings = {
         method: document.querySelector('input[name="scheduling_method"]:checked').value,
+        use_strict_hierarchy: document.getElementById('strict-hierarchy-cb').checked,
         timeout: document.getElementById('timeout-input').value,
         tabu_iterations: document.getElementById('tabu-iterations-input').value,
         tabu_tenure: document.getElementById('tabu-tenure-input').value,
@@ -1789,6 +1790,15 @@ function applySettingsToUI(settings) {
         if (algoSettings.consecutive_large_hall_rule) {
             document.getElementById('consecutive-large-hall-select').value = algoSettings.consecutive_large_hall_rule;
         }
+    // ✨✨ --- بداية الإضافة الجديدة --- ✨✨
+        // استعادة حالة خانة الاختيار للتسلسل الهرمي الصارم
+        if (algoSettings.use_strict_hierarchy) {
+            document.getElementById('strict-hierarchy-cb').checked = algoSettings.use_strict_hierarchy;
+        } else {
+            // إذا لم تكن القيمة محفوظة، تأكد من أنها غير محددة
+            document.getElementById('strict-hierarchy-cb').checked = false;
+        }
+        // ✨✨ --- نهاية الإضافة الجديدة --- ✨✨
     }
     
     // استعادة الفئات المرنة
@@ -2502,6 +2512,7 @@ function loadSettingsAndBuildUI() {
                     refinementRadio.checked = true;
                 }
             }
+            document.getElementById('strict-hierarchy-cb').checked = algo.use_strict_hierarchy || false;
         }
 
             if (settings.algorithm_settings && settings.algorithm_settings.refinement_selected_teachers) {
