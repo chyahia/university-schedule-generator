@@ -446,6 +446,7 @@ function collectAllCurrentSettings() {
         prioritize_primary: document.getElementById('prioritize-primary-slots-cb').checked,
         prefer_morning_slots: document.getElementById('prefer-morning-slots-cb').checked,
         teacher_pairs_text: document.getElementById('teacher-pairs-textarea').value,
+        non_sharing_teacher_pairs_text: document.getElementById('non-sharing-teacher-pairs-textarea').value,
         refinement_level: document.querySelector('input[name="refinement_level"]:checked').value,
         refinement_selected_teachers: Array.from(document.querySelectorAll('input[name="refine_teacher"]:checked')).map(cb => cb.value)
     };
@@ -550,6 +551,7 @@ function setupEventListeners() {
                             displaySchedules(data.schedule, data.days, data.slots);
                             displayFailureReport(data.failures, data.unassigned_courses);
                             document.getElementById('refine-schedule-btn').style.display = 'inline-block';
+                            document.getElementById('save-result-btn').style.display = 'inline-block';
                         } finally {
                             resetGenerationUI();
                             let finalMessage = "اكتملت عملية الجدولة.\n\n" + (data.failures && data.failures.length > 0 ? `--- تقرير الفشل (${data.failures.length} حالة) ---\n` + data.failures.slice(0, 5).map(f => `• ${f.teacher_name || "N/A"}: ${f.reason || "N/A"}`).join('\n') : "تم إنشاء الجداول بنجاح.");
@@ -1020,6 +1022,38 @@ function setupEventListeners() {
         document.querySelectorAll('#refinement-teacher-selection-container input[type="checkbox"]').forEach(cb => cb.checked = false);
     });
     // ✨✨ --- نهاية الإضافة --- ✨✨
+    const loadResultBtn = document.getElementById('load-result-btn');
+
+    loadResultBtn.addEventListener('click', () => {
+        if (confirm('هل أنت متأكد من استعادة آخر نتيجة محفوظة؟ سيتم عرضها بدلاً من أي جداول معروضة حالياً.')) {
+            fetch('/api/load-result')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success && data.result) {
+                        const result = data.result;
+
+                        currentScheduleData.schedule = result.schedule;
+                        currentScheduleData.days = result.days;
+                        currentScheduleData.slots = result.slots;
+
+                        displaySchedules(result.schedule, result.days, result.slots);
+
+                        document.getElementById('stats-dashboard-container').innerHTML = result.dashboard;
+                        document.getElementById('stats-dashboard-container').style.display = 'block';
+                        document.getElementById('failure-report-section').innerHTML = result.failures;
+                        document.getElementById('failure-report-section').style.display = 'block';
+
+                        document.getElementById('save-result-btn').style.display = 'inline-block';
+                        document.getElementById('refine-schedule-btn').style.display = 'inline-block';
+                        document.getElementById('comprehensive-check-btn').style.display = 'inline-block';
+
+                        alert('تم استعادة النتيجة المحفوظة بنجاح.');
+                    } else {
+                        alert(data.error || 'لم يتم العثور على نتيجة محفوظة.');
+                    }
+                });
+        }
+    });
 }
 
 // ==================== دوال إدارة الفئات المرنة ====================
@@ -1479,6 +1513,42 @@ function displaySchedules(scheduleData, days, slots) {
         handleBulkExport('/api/export/all-professors', dataToExport, exportProfessorsBtn, 'تصدير جداول الأساتذة (Excel)');
     });
     buttonsContainer.appendChild(exportProfessorsBtn);
+    const saveResultBtn = document.createElement('button');
+    saveResultBtn.id = 'save-result-btn';
+    saveResultBtn.textContent = '💾 حفظ هذه النتيجة';
+    saveResultBtn.style.backgroundColor = '#17a2b8'; 
+    buttonsContainer.appendChild(saveResultBtn);
+
+    // ربط وظيفة الحفظ بالزر مباشرة بعد إنشائه
+    saveResultBtn.addEventListener('click', () => {
+        if (!currentScheduleData.schedule) {
+            alert('لا توجد نتيجة حالية لحفظها.');
+            return;
+        }
+        if (confirm('هل أنت متأكد من حفظ هذه النتيجة؟ سيتم الكتابة فوق أي نتيجة محفوظة مسبقاً.')) {
+            const resultToSave = {
+                schedule: currentScheduleData.schedule,
+                days: currentScheduleData.days,
+                slots: currentScheduleData.slots,
+                failures: document.getElementById('failure-report-section').innerHTML,
+                dashboard: document.getElementById('stats-dashboard-container').innerHTML
+            };
+            fetch('/api/save-result', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(resultToSave)
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    alert(data.message);
+                } else {
+                    alert('فشل حفظ النتيجة: ' + data.error);
+                }
+            });
+        }
+    });
+
 
     const toggleFreeRoomsBtn = document.createElement('button');
     toggleFreeRoomsBtn.textContent = 'إظهار القاعات الشاغرة';
@@ -1786,6 +1856,7 @@ function applySettingsToUI(settings) {
         document.getElementById('prioritize-primary-slots-cb').checked = algoSettings.prioritize_primary || false;
         document.getElementById('prefer-morning-slots-cb').checked = algoSettings.prefer_morning_slots || false;
         document.getElementById('teacher-pairs-textarea').value = algoSettings.teacher_pairs_text || '';
+        document.getElementById('non-sharing-teacher-pairs-textarea').value = algoSettings.non_sharing_teacher_pairs_text || '';
         document.getElementById('max-sessions-per-day-select').value = algoSettings.max_sessions_per_day || 'none';
         if (algoSettings.consecutive_large_hall_rule) {
             document.getElementById('consecutive-large-hall-select').value = algoSettings.consecutive_large_hall_rule;
@@ -2500,6 +2571,8 @@ function loadSettingsAndBuildUI() {
             document.getElementById('max-sessions-per-day-select').value = algo.max_sessions_per_day || 'none';
             document.getElementById('prioritize-primary-slots-cb').checked = algo.prioritize_primary || false;
             document.getElementById('prefer-morning-slots-cb').checked = algo.prefer_morning_slots || false;
+            document.getElementById('teacher-pairs-textarea').value = algo.teacher_pairs_text || '';
+            document.getElementById('non-sharing-teacher-pairs-textarea').value = algo.non_sharing_teacher_pairs_text || '';
             if (algo.distribution_rule_type) {
                 document.querySelector(`input[name="distribution_rule_type"][value="${algo.distribution_rule_type}"]`).checked = true;
             }

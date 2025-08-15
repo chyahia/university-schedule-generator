@@ -294,6 +294,16 @@
                         </label>
                         <textarea id="teacher-pairs-textarea" rows="4" style="width: 100%;" placeholder="أ.محمد، أ.علي&#10;أ.خالد، أ.محمد"></textarea>
                     </div>
+
+                    <div style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 15px;">
+                        <label for="non-sharing-teacher-pairs-textarea">
+                            <strong>منع تشارك الأساتذة في أيام العمل (اختياري):</strong>
+                            <br>
+                            <small>(اكتب كل زوج من الأساتذة في سطر، مفصولين بفاصلة. سيضمن النظام أن أيام عملهما لن تتقاطع أبداً).</small>
+                        </label>
+                        <textarea id="non-sharing-teacher-pairs-textarea" rows="4" style="width: 100%;" placeholder="أ.علي، أ.فاطمة&#10;أ.يوسف، أ.سارة"></textarea>
+                    </div>
+
                     <div style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 15px;">
                         <label>
                             <strong>تخصيص قاعة كبيرة لكل مستوى (اختياري):</strong>
@@ -349,6 +359,18 @@
                                     <tbody>
                                         <tr data-constraint-key="distribution">
                                             <td>قيد التوزيع (أيام متتالية/منفصلة)</td>
+                                            <td>
+                                                <select style="width: 100%; padding: 5px;">
+                                                    <option value="hard">صارم (إلزامي)</option>
+                                                    <option value="high">مهم جداً (عقوبة: 20)</option>
+                                                    <option value="medium">مهم (عقوبة: 10)</option>
+                                                    <option value="low" selected>تفضيل بسيط (عقوبة: 1)</option>
+                                                    <option value="disabled">غير مهم (معطل)</option>
+                                                </select>
+                                            </td>
+                                        </tr>
+                                        <tr data-constraint-key="non_sharing_days">
+                                            <td>قيد منع تشارك الأساتذة في الأيام</td>
                                             <td>
                                                 <select style="width: 100%; padding: 5px;">
                                                     <option value="hard">صارم (إلزامي)</option>
@@ -762,6 +784,7 @@
                     <br><strong>تحذير:</strong> عملية الاستعادة ستقوم بالكتابة فوق كل البيانات الحالية.
                 </p>
                 <div class="final-buttons-container" style="display: flex; gap: 15px; justify-content: center;">
+                    <button id="load-result-btn" class="action-button" style="background-color: #6f42c1;">📂 استعادة آخر نتيجة</button>
                     <button id="backup-btn" class="action-button" style="background-color: #218838;">💾 تصدير نسخة احتياطية</button>
                     <button id="restore-btn" class="action-button" style="background-color: #e0a800;">📂 استيراد نسخة احتياطية</button>
                     <button id="reset-all-btn" class="action-button" style="background-color: #dc3545;">🔄 مسح كل البيانات</button>
