@@ -1022,11 +1022,13 @@ function setupEventListeners() {
         document.querySelectorAll('#refinement-teacher-selection-container input[type="checkbox"]').forEach(cb => cb.checked = false);
     });
     // ✨✨ --- نهاية الإضافة --- ✨✨
-    const loadResultBtn = document.getElementById('load-result-btn');
+    const loadResult1Btn = document.getElementById('load-result-1-btn');
+    const loadResult2Btn = document.getElementById('load-result-2-btn');
 
-    loadResultBtn.addEventListener('click', () => {
-        if (confirm('هل أنت متأكد من استعادة آخر نتيجة محفوظة؟ سيتم عرضها بدلاً من أي جداول معروضة حالياً.')) {
-            fetch('/api/load-result')
+    // دالة مساعدة لتجنب تكرار كود الاستعادة
+    const loadResult = (slotId) => {
+        if (confirm(`هل أنت متأكد من استعادة النتيجة المحفوظة في الخانة ${slotId}؟`)) {
+            fetch(`/api/load-result/${slotId}`) // استخدام المسار الديناميكي
                 .then(res => res.json())
                 .then(data => {
                     if (data.success && data.result) {
@@ -1037,23 +1039,34 @@ function setupEventListeners() {
                         currentScheduleData.slots = result.slots;
 
                         displaySchedules(result.schedule, result.days, result.slots);
+                        
+                        // إعادة عرض الأجزاء المحفوظة
+                        const dashboardContainer = document.getElementById('stats-dashboard-container');
+                        const failureReportSection = document.getElementById('failure-report-section');
+                        if (dashboardContainer) {
+                        dashboardContainer.innerHTML = result.dashboard;
+                        dashboardContainer.style.display = 'block';
+                        }
+                        if (failureReportSection) {
+                            failureReportSection.innerHTML = result.failures;
+                            failureReportSection.style.display = 'block';
+                        }
 
-                        document.getElementById('stats-dashboard-container').innerHTML = result.dashboard;
-                        document.getElementById('stats-dashboard-container').style.display = 'block';
-                        document.getElementById('failure-report-section').innerHTML = result.failures;
-                        document.getElementById('failure-report-section').style.display = 'block';
-
-                        document.getElementById('save-result-btn').style.display = 'inline-block';
+                        // إظهار الأزرار ذات الصلة
                         document.getElementById('refine-schedule-btn').style.display = 'inline-block';
                         document.getElementById('comprehensive-check-btn').style.display = 'inline-block';
 
-                        alert('تم استعادة النتيجة المحفوظة بنجاح.');
+                        alert(`تم استعادة النتيجة من الخانة ${slotId} بنجاح.`);
                     } else {
-                        alert(data.error || 'لم يتم العثور على نتيجة محفوظة.');
+                        alert(data.error || `لم يتم العثور على نتيجة في الخانة ${slotId}.`);
                     }
                 });
         }
-    });
+    };
+
+    // ربط الأحداث بالأزرار
+    if(loadResult1Btn) loadResult1Btn.addEventListener('click', () => loadResult(1));
+    if(loadResult2Btn) loadResult2Btn.addEventListener('click', () => loadResult(2));
 }
 
 // ==================== دوال إدارة الفئات المرنة ====================
@@ -1493,8 +1506,18 @@ function displaySchedules(scheduleData, days, slots) {
         return;
     }
 
+    // 1. إنشاء الحاوية الرئيسية وتغيير تنسيقها لترتيب العناصر عمودياً
     const buttonsContainer = document.createElement('div');
     buttonsContainer.className = 'export-buttons-container';
+    buttonsContainer.style.flexDirection = 'column'; // لجعل الصفوف تحت بعضها
+    buttonsContainer.style.alignItems = 'center'; // لتوسيط الصفوف
+
+    // 2. إنشاء الصف الأول لأزرار التصدير
+    const row1 = document.createElement('div');
+    row1.style.display = 'flex';
+    row1.style.gap = '15px';
+    row1.style.justifyContent = 'center';
+    row1.style.width = '100%';
 
     const exportLevelsBtn = document.createElement('button');
     exportLevelsBtn.textContent = 'تصدير جداول المستويات (Excel)';
@@ -1503,7 +1526,7 @@ function displaySchedules(scheduleData, days, slots) {
         const dataToExport = { schedule: currentScheduleData.schedule, days: days, slots: slots };
         handleBulkExport('/api/export/all-levels', dataToExport, exportLevelsBtn, 'تصدير جداول المستويات (Excel)');
     });
-    buttonsContainer.appendChild(exportLevelsBtn);
+    row1.appendChild(exportLevelsBtn);
 
     const exportProfessorsBtn = document.createElement('button');
     exportProfessorsBtn.textContent = 'تصدير جداول الأساتذة (Excel)';
@@ -1512,44 +1535,34 @@ function displaySchedules(scheduleData, days, slots) {
         const dataToExport = { schedule: currentScheduleByProfessor, days: days, slots: slots };
         handleBulkExport('/api/export/all-professors', dataToExport, exportProfessorsBtn, 'تصدير جداول الأساتذة (Excel)');
     });
-    buttonsContainer.appendChild(exportProfessorsBtn);
-    const saveResultBtn = document.createElement('button');
-    saveResultBtn.id = 'save-result-btn';
-    saveResultBtn.textContent = '💾 حفظ هذه النتيجة';
-    saveResultBtn.style.backgroundColor = '#17a2b8'; 
-    buttonsContainer.appendChild(saveResultBtn);
+    row1.appendChild(exportProfessorsBtn);
 
-    // ربط وظيفة الحفظ بالزر مباشرة بعد إنشائه
-    saveResultBtn.addEventListener('click', () => {
-        if (!currentScheduleData.schedule) {
-            alert('لا توجد نتيجة حالية لحفظها.');
-            return;
-        }
-        if (confirm('هل أنت متأكد من حفظ هذه النتيجة؟ سيتم الكتابة فوق أي نتيجة محفوظة مسبقاً.')) {
-            const resultToSave = {
-                schedule: currentScheduleData.schedule,
-                days: currentScheduleData.days,
-                slots: currentScheduleData.slots,
-                failures: document.getElementById('failure-report-section').innerHTML,
-                dashboard: document.getElementById('stats-dashboard-container').innerHTML
-            };
-            fetch('/api/save-result', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(resultToSave)
-            })
-            .then(res => res.json())
-            .then(data => {
-                if (data.success) {
-                    alert(data.message);
-                } else {
-                    alert('فشل حفظ النتيجة: ' + data.error);
-                }
-            });
-        }
-    });
+    // 3. إنشاء الصف الثاني لأزرار الحفظ
+    const row2 = document.createElement('div');
+    row2.style.display = 'flex';
+    row2.style.gap = '15px';
+    row2.style.justifyContent = 'center';
+    row2.style.width = '100%';
 
+    const saveResultBtn1 = document.createElement('button');
+    saveResultBtn1.id = 'save-result-1-btn';
+    saveResultBtn1.textContent = '💾 حفظ النتيجة 1';
+    saveResultBtn1.style.backgroundColor = '#17a2b8'; 
+    row2.appendChild(saveResultBtn1);
+    
+    const saveResultBtn2 = document.createElement('button');
+    saveResultBtn2.id = 'save-result-2-btn';
+    saveResultBtn2.textContent = '💾 حفظ النتيجة 2';
+    saveResultBtn2.style.backgroundColor = '#148a9d';
+    row2.appendChild(saveResultBtn2);
 
+    // 4. إنشاء الصف الثالث لبقية الأزرار
+    const row3 = document.createElement('div');
+    row3.style.display = 'flex';
+    row3.style.gap = '15px';
+    row3.style.justifyContent = 'center';
+    row3.style.width = '100%';
+    
     const toggleFreeRoomsBtn = document.createElement('button');
     toggleFreeRoomsBtn.textContent = 'إظهار القاعات الشاغرة';
     toggleFreeRoomsBtn.style.backgroundColor = '#6c757d';
@@ -1570,16 +1583,55 @@ function displaySchedules(scheduleData, days, slots) {
             }
         }
     });
-    buttonsContainer.appendChild(toggleFreeRoomsBtn);
+    row3.appendChild(toggleFreeRoomsBtn);
+
     const manualEditBtn = document.createElement('button');
     manualEditBtn.id = 'toggle-manual-edit-btn';
     manualEditBtn.textContent = '✏️ تفعيل التعديل اليدوي';
     manualEditBtn.style.backgroundColor = '#ffc107';
     manualEditBtn.style.color = '#212529';
     manualEditBtn.addEventListener('click', toggleManualEditingMode);
-    buttonsContainer.appendChild(manualEditBtn);
+    row3.appendChild(manualEditBtn);
+    
+    // 5. إضافة الصفوف إلى الحاوية الرئيسية
+    buttonsContainer.appendChild(row1);
+    buttonsContainer.appendChild(row2);
+    buttonsContainer.appendChild(row3);
     
     outputDiv.appendChild(buttonsContainer);
+
+    // --- هذا الجزء يبقى كما هو (منطق الحفظ) ---
+    const saveResult = (slotId) => {
+        if (!currentScheduleData.schedule) {
+            alert('لا توجد نتيجة حالية لحفظها.');
+            return;
+        }
+        if (confirm(`هل أنت متأكد من حفظ هذه النتيجة في الخانة ${slotId}؟ سيتم الكتابة فوق أي نتيجة محفوظة في هذه الخانة.`)) {
+            const resultToSave = {
+                schedule: currentScheduleData.schedule,
+                days: currentScheduleData.days,
+                slots: currentScheduleData.slots,
+                failures: document.getElementById('failure-report-section').innerHTML,
+                dashboard: document.getElementById('stats-dashboard-container').innerHTML
+            };
+            fetch(`/api/save-result/${slotId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(resultToSave)
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    alert(data.message);
+                } else {
+                    alert('فشل حفظ النتيجة: ' + data.error);
+                }
+            });
+        }
+    };
+    
+    saveResultBtn1.addEventListener('click', () => saveResult(1));
+    saveResultBtn2.addEventListener('click', () => saveResult(2));
 
     const levelNameMap = {"Bachelor 1": "ليسانس 1", "Bachelor 2": "ليسانس 2", "Bachelor 3": "ليسانس 3", "Master 1": "ماستر 1", "Master 2": "ماستر 2"};
     const sortedLevels = Object.keys(scheduleData).sort();

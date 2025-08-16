@@ -5706,44 +5706,49 @@ def validate_manual_move():
         traceback.print_exc()
         return jsonify({"isValid": False, "reason": f"خطأ في الخادم: {str(e)}"}), 500
 
-# ================== (جديد) مسارات حفظ واستعادة النتائج ==================
-@app.route('/api/save-result', methods=['POST'])
-def save_schedule_result():
+# ================== (جديد) مسارات حفظ واستعادة النتائج (نسخة محدثة تدعم خانتين) ==================
+@app.route('/api/save-result/<int:slot_id>', methods=['POST'])
+def save_schedule_result(slot_id):
     """
-    يحفظ الجدول الكامل الناتج في قاعدة البيانات كـ JSON.
+    يحفظ الجدول الكامل الناتج في قاعدة البيانات في الخانة المحددة (1 أو 2).
     """
+    if slot_id not in [1, 2]:
+        return jsonify({"error": "رقم خانة الحفظ غير صالح."}), 400
     try:
         result_data = request.get_json()
-        # نحول كائن النتيجة إلى نص JSON لتخزينه
         result_json = json.dumps(result_data, ensure_ascii=False)
         
-        # نستخدم مفتاحاً مميزاً لحفظ النتيجة
-        execute_db('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', ('last_schedule_result', result_json))
+        # استخدام مفتاح ديناميكي بناءً على رقم الخانة
+        db_key = f'schedule_result_{slot_id}'
+        execute_db('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', (db_key, result_json))
         
-        return jsonify({"success": True, "message": "تم حفظ النتيجة بنجاح."})
+        return jsonify({"success": True, "message": f"تم حفظ النتيجة في الخانة رقم {slot_id} بنجاح."})
     except Exception as e:
         traceback.print_exc()
         return jsonify({"error": f"حدث خطأ أثناء الحفظ: {str(e)}"}), 500
 
-@app.route('/api/load-result', methods=['GET'])
-def load_schedule_result():
+@app.route('/api/load-result/<int:slot_id>', methods=['GET'])
+def load_schedule_result(slot_id):
     """
-    يسترجع آخر جدول تم حفظه من قاعدة البيانات.
+    يسترجع الجدول المحفوظ من الخانة المحددة (1 أو 2).
     """
+    if slot_id not in [1, 2]:
+        return jsonify({"error": "رقم خانة الحفظ غير صالح."}), 400
     try:
-        result_row = query_db('SELECT value FROM settings WHERE key = ?', ('last_schedule_result',), one=True)
+        db_key = f'schedule_result_{slot_id}'
+        result_row = query_db('SELECT value FROM settings WHERE key = ?', (db_key,), one=True)
         
         if result_row and result_row['value']:
-            # نحول نص JSON المسترجع إلى كائن بايثون
             saved_result = json.loads(result_row['value'])
             return jsonify({"success": True, "result": saved_result})
         else:
-            return jsonify({"success": False, "error": "لم يتم العثور على أي نتيجة محفوظة مسبقاً."}), 404
+            return jsonify({"success": False, "error": f"لم يتم العثور على أي نتيجة محفوظة في الخانة رقم {slot_id}."}), 404
     except Exception as e:
         traceback.print_exc()
         return jsonify({"error": f"حدث خطأ أثناء الاستعادة: {str(e)}"}), 500
+# ========================================================================================================
 
-# =========================================================================
+
 
 if __name__ == '__main__':
     # --- بداية التعديل ---
