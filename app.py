@@ -3948,6 +3948,7 @@ def process_and_format_sheet(writer, df, sheet_name, title=None, sheet_type=None
         'text_wrap': True,
         'valign': 'vcenter',
         'align': 'center',
+        'reading_order': 2,
     })
 
     # 2. تطبيق التنسيق أعلاه على الأعمدة
