@@ -5070,12 +5070,28 @@ def run_refinement_task(schedule, settings, days, slots, log_q, all_courses, tea
             if teacher_name in teacher_constraints:
                 teacher_constraints[teacher_name]['allowed_days'] = {day_to_idx[d] for d in days_list if d in day_to_idx}
 
+        # ================== بداية الكود الجديد الذي يجب إضافته ==================
+        num_slots = len(slots)
+        globally_unavailable_slots = set()
+        rest_periods = phase_5_settings.get('rest_periods', {})
+
+        if rest_periods.get('tuesday_evening') and 'الثلاثاء' in day_to_idx and num_slots >= 2:
+            tuesday_idx = day_to_idx['الثلاثاء']
+            globally_unavailable_slots.add((tuesday_idx, num_slots - 2))
+            globally_unavailable_slots.add((tuesday_idx, num_slots - 1))
+
+        if rest_periods.get('thursday_evening') and 'الخميس' in day_to_idx and num_slots >= 2:
+            thursday_idx = day_to_idx['الخميس']
+            globally_unavailable_slots.add((thursday_idx, num_slots - 2))
+            globally_unavailable_slots.add((thursday_idx, num_slots - 1))
+        # ================== نهاية الكود الجديد الذي يجب إضافته ==================
+        
         refinement_level = algorithm_settings.get('refinement_level', 'balanced')
         # 1. استدعاء دالة التحسين
         refined_schedule, refinement_log = refine_and_compact_schedule(
             schedule, log_q, selected_teachers, all_courses, days, slots, rooms_data, teachers, all_levels, 
             identifiers_by_level, special_constraints, teacher_constraints, distribution_rule_type,
-            lectures_by_teacher_map, set(), saturday_teachers, teacher_pairs,
+            lectures_by_teacher_map, globally_unavailable_slots, saturday_teachers, teacher_pairs,
             day_to_idx, rules_grid, phase_5_settings.get('last_slot_restrictions', {}),
             level_specific_large_rooms, specific_small_room_assignments, constraint_severities, max_sessions_per_day,
             consecutive_large_hall_rule, refinement_level=refinement_level, non_sharing_teacher_pairs=non_sharing_teacher_pairs
