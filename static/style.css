@@ -1239,3 +1239,30 @@ body.body-sidebar-visible main {
 #sidebar-toggle-btn:hover {
     background-color: #0056b3;
 }
+
+/* ✨✨ --- بداية إضافة تنسيقات تقرير الأداء --- ✨✨ */
+.performance-report-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 25px;
+    font-size: 14px;
+}
+.performance-report-table th, .performance-report-table td {
+    border: 1px solid #ccc;
+    padding: 8px 10px;
+    text-align: center;
+}
+.performance-report-table th {
+    background-color: #e9ecef;
+    font-weight: bold;
+}
+.performance-report-table tbody tr:nth-child(even) {
+    background-color: #f8f9fa;
+}
+.performance-report-table .average-row td {
+    font-weight: bold;
+    background-color: #d1e7dd; /* لون أخضر فاتح */
+    color: #0f5132;
+}
+/* ✨✨ --- نهاية الإضافة --- ✨✨ */
+

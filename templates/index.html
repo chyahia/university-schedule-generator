@@ -46,6 +46,17 @@
         </div>
     </div>
 
+    <div id="performance-report-modal" class="modal">
+        <div class="modal-content" style="width: 85%; max-width: 1100px;">
+            <span class="close-btn">&times;</span>
+            <h2>📊 تقرير أداء الخوارزميات</h2>
+            <p id="performance-report-subtitle" style="text-align: center; font-weight: bold; color: #0056b3;"></p>
+            <div id="performance-report-content" style="max-height: 70vh; overflow-y: auto;">
+                <p>جاري تحميل التقرير...</p>
+            </div>
+        </div>
+    </div>
+
     <nav id="sidebar-nav">
         <ul>
             <li><a href="#data-entry">المرحلة 1: إدخال البيانات</a></li>
@@ -767,13 +778,28 @@
                     <button id="save-current-settings-as-btn" class="action-button" style="background-color: #007bff;">💾 حفظ الإعدادات الحالية باسم</button>
                     
                     <select id="saved-settings-dropdown" style="padding: 10px; border-radius: 5px; border: 1px solid #ccc; font-size: 16px; flex-grow: 1; max-width: 300px;">
-                        <option value="">-- اختر إعدادات محفوظة --</option>
                     </select>
                     
                     <button id="load-selected-settings-btn" class="action-button" style="background-color: #28a745;" disabled>📂 استعادة الإعدادات المختارة</button>
                     <button id="delete-selected-settings-btn" class="action-button" style="background-color: #dc3545;" disabled>🗑️ حذف الإعدادات المختارة</button>
+                    <button id="show-performance-report-btn" class="action-button" style="background-color: #6610f2;" disabled>📊 عرض تقرير الأداء</button>
                 </div>
             </div>
+
+            <div id="report-manager-section" style="margin-top: 40px; border-top: 2px dashed #6610f2; padding-top: 20px;">
+                <h3 style="text-align: center; color: #6610f2;">مدير تقارير الأداء</h3>
+                <p style="text-align: center; font-size: 15px; color: #555;">
+                    هنا يمكنك عرض أو حذف سجلات الأداء التاريخية، بما في ذلك تلك التي تم حذف إعداداتها.
+                </p>
+                <div style="display: flex; gap: 15px; justify-content: center; align-items: center; margin-top: 20px;">
+                    <select id="report-manager-dropdown" style="padding: 10px; border-radius: 5px; border: 1px solid #ccc; font-size: 16px; flex-grow: 1; max-width: 400px;">
+                        <option value="">-- اختر مجموعة تقارير لعرضها أو حذفها --</option>
+                    </select>
+                    <button id="report-manager-view-btn" class="action-button" style="background-color: #6610f2; width: auto;" disabled>📊 عرض التقرير</button>
+                    <button id="report-manager-delete-btn" class="action-button" style="background-color: #dc3545; width: auto;" disabled>🗑️ حذف هذه التقارير</button>
+                </div>
+            </div>
+
         </section>
 
         <section id="backup-restore-section">

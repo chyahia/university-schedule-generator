@@ -32,6 +32,7 @@ window.addEventListener('DOMContentLoaded', () => {
     setupFlexCategoriesListeners();
     setupSidebarToggle();
     setupSidebarNavigation();
+    setupReportManagerListeners();
 });
 
 function setupSidebarNavigation() {
@@ -503,6 +504,7 @@ function setupEventListeners() {
 
         // 2. جمع الإعدادات والتحقق منها
         const settings = collectAllCurrentSettings();
+        settings.settings_profile_name = document.getElementById('saved-settings-dropdown').value;
         if (Object.keys(settings.schedule_structure).length === 0 || !Object.values(settings.schedule_structure).some(day => Object.keys(day).length > 0)) {
             alert('الرجاء إضافة يوم دراسي واحد على الأقل مع فترة زمنية واحدة في المرحلة 4.');
             resetGenerationUI();
@@ -2043,27 +2045,33 @@ async function populateAssignmentDropdowns(courseSelect, roomSelect, assignment)
 }
 
 function setupModalListeners() {
-    const modal = document.getElementById("help-modal");
+    const helpModal = document.getElementById("help-modal");
+    const performanceModal = document.getElementById("performance-report-modal"); // <-- ✨ السطر المضاف
     const helpBtn = document.getElementById("help-button");
     const aboutBtn = document.getElementById("about-button");
     
-    if (!modal || !helpBtn || !aboutBtn) {
-        console.error("Modal or its control buttons not found.");
-        return;
+    
+    helpBtn.addEventListener('click', () => helpModal.style.display = "block");
+
+    // ... (كود زر الإغلاق الخاص بنافذة المساعدة)
+    const helpCloseBtn = helpModal.querySelector(".close-btn");
+    if(helpCloseBtn) {
+        helpCloseBtn.addEventListener('click', () => helpModal.style.display = "none");
     }
 
-    const closeBtn = modal.querySelector(".close-btn");
-
-    helpBtn.addEventListener('click', () => modal.style.display = "block");
-    aboutBtn.addEventListener('click', () => alert("Copyright (C) 2025 CHAIB YAHIA"));
-
-    if (closeBtn) {
-        closeBtn.addEventListener('click', () => modal.style.display = "none");
+    // ✨ كود جديد لإغلاق نافذة تقرير الأداء
+    const performanceCloseBtn = performanceModal.querySelector(".close-btn");
+    if(performanceCloseBtn) {
+        performanceCloseBtn.addEventListener('click', () => performanceModal.style.display = "none");
     }
 
     window.addEventListener('click', (event) => {
-        if (event.target == modal) {
-            modal.style.display = "none";
+        if (event.target == helpModal) {
+            helpModal.style.display = "none";
+        }
+        // ✨ إضافة الشرط الخاص بالنافذة الجديدة
+        if (event.target == performanceModal) {
+            performanceModal.style.display = "none";
         }
     });
 }
@@ -2817,6 +2825,7 @@ function setupSettingsManagementListeners() {
     const loadSelectedBtn = document.getElementById('load-selected-settings-btn');
     const deleteSelectedBtn = document.getElementById('delete-selected-settings-btn');
     const settingsDropdown = document.getElementById('saved-settings-dropdown');
+    const showReportBtn = document.getElementById('show-performance-report-btn');
 
     // تحميل أسماء الإعدادات المحفوظة عند بدء التشغيل
     loadSavedSettingsNames();
@@ -2834,7 +2843,8 @@ function setupSettingsManagementListeners() {
                 const data = await response.json();
                 if (data.success) {
                     alert(data.message);
-                    loadSavedSettingsNames(); // تحديث القائمة المنسدلة
+                    loadSavedSettingsNames(settingsName.trim()); // ✨ تحديث القائمة مع تحديد الاسم الجديد
+                    localStorage.setItem('lastUsedSettingName', settingsName.trim()); // ✨ حفظ الاسم الجديد في ذاكرة المتصفح
                 } else {
                     alert('فشل الحفظ: ' + data.error);
                 }
@@ -2849,6 +2859,95 @@ function setupSettingsManagementListeners() {
         const selectedName = settingsDropdown.value;
         loadSelectedBtn.disabled = !selectedName;
         deleteSelectedBtn.disabled = !selectedName;
+        showReportBtn.disabled = !selectedName;
+    });
+
+    showReportBtn.addEventListener('click', async () => {
+        const selectedName = settingsDropdown.value;
+        if (!selectedName) return;
+
+        const modal = document.getElementById('performance-report-modal');
+        const contentDiv = document.getElementById('performance-report-content');
+        const subtitle = document.getElementById('performance-report-subtitle');
+
+        subtitle.textContent = `تقرير الأداء الخاص بالإعدادات: "${selectedName}"`;
+        contentDiv.innerHTML = '<p style="text-align:center;">جاري تحميل التقرير...</p>';
+        modal.style.display = 'block';
+
+        try {
+            const response = await fetch(`/api/performance-report?settings=${encodeURIComponent(selectedName)}`);
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.error || 'فشل في جلب البيانات');
+            }
+            const data = await response.json();
+            
+            contentDiv.innerHTML = ''; // مسح رسالة التحميل
+
+            if (Object.keys(data).length === 0) {
+                contentDiv.innerHTML = '<p style="text-align:center;">لا توجد سجلات أداء لهذه الإعدادات حتى الآن.</p>';
+                return;
+            }
+
+            for (const algoName in data) {
+                const runs = data[algoName];
+                
+                let tableHTML = `
+                    <h4 style="background-color:#f0f0f0; padding: 8px; border-radius: 4px;">${algoName}</h4>
+                    <table class="performance-report-table">
+                        <thead>
+                            <tr>
+                                <th>تاريخ التشغيل</th>
+                                <th>وقت التنفيذ (ث)</th>
+                                <th>المواد الناقصة</th>
+                                <th>أخطاء صارمة</th>
+                                <th>أخطاء مرنة</th>
+                                <th>التكلفة الإجمالية</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+
+                let totalTime = 0, totalUnplaced = 0, totalHard = 0, totalSoft = 0, totalCost = 0;
+
+                runs.forEach(run => {
+                    totalTime += run.execution_time;
+                    totalUnplaced += run.unplaced_count;
+                    totalHard += run.hard_errors;
+                    totalSoft += run.soft_errors;
+                    totalCost += run.total_cost;
+
+                    tableHTML += `
+                        <tr>
+                            <td>${new Date(run.timestamp).toLocaleString('ar-DZ')}</td>
+                            <td>${run.execution_time.toFixed(2)}</td>
+                            <td>${run.unplaced_count}</td>
+                            <td>${run.hard_errors}</td>
+                            <td>${run.soft_errors}</td>
+                            <td>${run.total_cost.toFixed(0)}</td>
+                        </tr>
+                    `;
+                });
+
+                // إضافة صف المتوسط الحسابي
+                const runCount = runs.length;
+                tableHTML += `
+                        <tr class="average-row">
+                            <td><strong>المتوسط</strong></td>
+                            <td>${(totalTime / runCount).toFixed(2)}</td>
+                            <td>${(totalUnplaced / runCount).toFixed(1)}</td>
+                            <td>${(totalHard / runCount).toFixed(1)}</td>
+                            <td>${(totalSoft / runCount).toFixed(1)}</td>
+                            <td>${(totalCost / runCount).toFixed(0)}</td>
+                        </tr>
+                    </tbody></table>
+                `;
+                contentDiv.innerHTML += tableHTML;
+            }
+
+        } catch (error) {
+            contentDiv.innerHTML = `<p style="text-align:center; color:red;">خطأ: ${error.message}</p>`;
+        }
     });
 
     loadSelectedBtn.addEventListener('click', async () => {
@@ -2865,6 +2964,8 @@ function setupSettingsManagementListeners() {
             if (response.ok) {
                 applySettingsToUI(settings);
                 alert(`تم استعادة الإعدادات باسم "${selectedName}" بنجاح.`);
+                settingsDropdown.value = selectedName; // ✨ تحديث القائمة المنسدلة لتعكس الإعداد المستعاد
+                localStorage.setItem('lastUsedSettingName', selectedName); // ✨ حفظ الاسم في ذاكرة المتصفح
             } else {
                 alert('فشل الاستعادة: ' + settings.error);
             }
@@ -2905,22 +3006,140 @@ function setupSettingsManagementListeners() {
     });
 }
 
-async function loadSavedSettingsNames() {
+// =======================================================
+// --- (جديد) دالة خاصة بمدير تقارير الأداء ---
+// =======================================================
+function setupReportManagerListeners() {
+    const dropdown = document.getElementById('report-manager-dropdown');
+    const viewBtn = document.getElementById('report-manager-view-btn');
+    const deleteBtn = document.getElementById('report-manager-delete-btn');
+    const showPerformanceReportBtn = document.getElementById('show-performance-report-btn'); // الزر الأصلي
+
+    // 1. دالة لملء القائمة المنسدلة
+    async function populateReportsDropdown() {
+        try {
+            const response = await fetch('/api/performance-report/all-names');
+            if (!response.ok) throw new Error('فشل جلب أسماء التقارير');
+            const names = await response.json();
+            
+            dropdown.innerHTML = '<option value="">-- اختر مجموعة تقارير لعرضها أو حذفها --</option>'; // إعادة تعيين
+            names.forEach(name => {
+                const option = document.createElement('option');
+                option.value = name;
+                option.textContent = name;
+                dropdown.appendChild(option);
+            });
+        } catch (error) {
+            console.error("خطأ في ملء قائمة التقارير:", error);
+        }
+    }
+
+    // 2. تفعيل/تعطيل الأزرار عند تغيير الاختيار
+    dropdown.addEventListener('change', () => {
+        const hasSelection = dropdown.value !== "";
+        viewBtn.disabled = !hasSelection;
+        deleteBtn.disabled = !hasSelection;
+    });
+
+    // 3. منطق زر "عرض التقرير"
+    viewBtn.addEventListener('click', () => {
+        const selectedName = dropdown.value;
+        if (!selectedName) return;
+
+        // نستدعي نفس دالة عرض التقرير الأصلية ولكن نمرر لها الاسم من هنا
+        // هذا يتطلب تعديل بسيط على الدالة الأصلية
+        // سنجعل الزر الأصلي يقوم بالنقر "البرمجي" بعد تحديد القيمة
+        const mainDropdown = document.getElementById('saved-settings-dropdown');
+        // نضيف الخيار مؤقتاً إذا لم يكن موجوداً
+        if (![...mainDropdown.options].some(opt => opt.value === selectedName)) {
+            mainDropdown.add(new Option(selectedName, selectedName));
+        }
+        mainDropdown.value = selectedName;
+        showPerformanceReportBtn.disabled = false;
+        showPerformanceReportBtn.click();
+    });
+
+    // 4. منطق زر "حذف التقارير"
+    deleteBtn.addEventListener('click', async () => {
+        const nameToDelete = dropdown.value;
+        if (!nameToDelete) return;
+
+        if (!confirm(`هل أنت متأكد من حذف جميع سجلات الأداء (${nameToDelete})؟ لا يمكن التراجع عن هذا الإجراء.`)) {
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/performance-report/delete-by-name', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: nameToDelete })
+            });
+            const result = await response.json();
+            if (result.success) {
+                alert(result.message);
+                populateReportsDropdown(); // تحديث القائمة لإزالة الاسم المحذوف
+                viewBtn.disabled = true;
+                deleteBtn.disabled = true;
+            } else {
+                throw new Error(result.error || 'فشل الحذف');
+            }
+        } catch (error) {
+            alert(`حدث خطأ: ${error.message}`);
+        }
+    });
+
+    // 5. استدعاء الدالة لملء القائمة عند تحميل الصفحة
+    populateReportsDropdown();
+}
+
+async function loadSavedSettingsNames(selectName = null) {
     const settingsDropdown = document.getElementById('saved-settings-dropdown');
-    settingsDropdown.innerHTML = '<option value="">-- اختر إعدادات محفوظة --</option>'; // إعادة تعيين
+    settingsDropdown.innerHTML = ''; // نبدأ القائمة فارغة
 
     try {
         const response = await fetch('/api/settings/get_saved_names');
         const names = await response.json();
+
+        if (names.length === 0) {
+            const option = document.createElement('option');
+            option.textContent = 'لا توجد إعدادات محفوظة';
+            settingsDropdown.appendChild(option);
+            settingsDropdown.disabled = true;
+            document.getElementById('load-selected-settings-btn').disabled = true;
+            document.getElementById('delete-selected-settings-btn').disabled = true;
+            document.getElementById('show-performance-report-btn').disabled = true;
+            return;
+        }
+        
+        settingsDropdown.disabled = false;
+
         names.forEach(name => {
             const option = document.createElement('option');
             option.value = name;
             option.textContent = name;
             settingsDropdown.appendChild(option);
         });
+
+        // ✨ --- بداية المنطق الجديد والمحسن --- ✨
+        // 1. محاولة قراءة آخر اسم تم استخدامه من ذاكرة المتصفح
+        const lastUsedName = localStorage.getItem('lastUsedSettingName');
+
+        if (selectName && names.includes(selectName)) {
+            // أولوية للاسم الممرر مباشرة (بعد الحفظ أو الاستعادة)
+            settingsDropdown.value = selectName;
+        } else if (lastUsedName && names.includes(lastUsedName)) {
+            // إذا لم يتم تمرير اسم، استخدم الاسم المحفوظ في الذاكرة
+            settingsDropdown.value = lastUsedName;
+        } else if (names.length > 0) {
+            // كحل أخير، اختر الخيار الأول
+            settingsDropdown.value = names[0];
+        }
+        // ✨ --- نهاية المنطق الجديد والمحسن --- ✨
+
+        settingsDropdown.dispatchEvent(new Event('change'));
+
     } catch (error) {
         console.error('Error loading saved settings names:', error);
-        // لا تعرض تنبيه للمستخدم هنا، فقط سجل الخطأ
     }
 }
 

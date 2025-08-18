@@ -134,6 +134,14 @@ def close_db(e=None):
     if db is not None:
         db.close()
 
+def add_column_if_not_exists(cursor, table_name, column_name, column_type):
+    """يضيف عمودًا إلى جدول إذا لم يكن موجودًا بالفعل."""
+    cursor.execute(f"PRAGMA table_info({table_name})")
+    columns = [row[1] for row in cursor.fetchall()]
+    if column_name not in columns:
+        cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}")
+        print(f"Added column '{column_name}' to table '{table_name}'.")
+
 def init_db():
     """
     تنشئ الجداول في قاعدة البيانات إذا لم تكن موجودة.
@@ -192,6 +200,21 @@ def init_db():
         value TEXT NOT NULL
     )''')
 
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS performance_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        settings_name TEXT NOT NULL,
+        algorithm_name TEXT NOT NULL,
+        unplaced_count INTEGER NOT NULL,
+        hard_errors INTEGER NOT NULL,
+        soft_errors INTEGER NOT NULL,
+        total_cost REAL NOT NULL,
+        execution_time REAL NOT NULL,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    )''')
+
+    add_column_if_not_exists(cursor, 'performance_log', 'algorithm_params', 'TEXT')
+    
     conn.commit()
     conn.close()
 
@@ -852,7 +875,10 @@ def run_tabu_search(
     for i in range(max_iterations):
         if scheduling_state.get('should_stop'):
             # رفع استثناء للتوقف إذا طلب المستخدم ذلك
-            raise StopByUserException() 
+            raise StopByUserException()
+        if (i + 1) % 50 == 0 and i > 0:
+            unplaced, hard, soft = -best_fitness[0], -best_fitness[1], -best_fitness[2]
+            log_q.put(f"--- (متابعة) دورة {i+1}: أفضل لياقة حالية (ن,ص,م)=({unplaced}, {hard}, {soft}) ---")
         
         time.sleep(0) # للسماح لواجهة المستخدم بالتحديث
         
@@ -2240,8 +2266,9 @@ def mutate(
 @app.route('/api/generate-schedule', methods=['POST'])
 def generate_schedule():
     
-    def run_scheduling_task(settings, courses, rooms_data, all_levels, teachers, identifiers_by_level, scheduling_state, log_q, prefer_morning_slots=False):
+    def run_scheduling_task(settings_profile_name, settings, courses, rooms_data, all_levels, teachers, identifiers_by_level, scheduling_state, log_q, prefer_morning_slots=False):
         try:
+            start_time = time.time()
             courses_original_state = copy.deepcopy(courses)
             # --- استخراج الكائنات الفرعية أولاً ---
             phase_5_settings = settings.get('phase_5_settings', {})
@@ -3068,9 +3095,99 @@ def generate_schedule():
             # --- نهاية حلقة المحاولات، والآن معالجة النتيجة النهائية ---
             
             if not all_results:
-                raise Exception("خطأ: لم يتم إنتاج أي نتائج بعد انتهاء جميع المحاولات.")
+                # يمكن أن يحدث هذا إذا تم إيقاف العملية مباشرة مع انتهاء المحاولة الأخيرة
+                # سيتم التعامل مع هذا كإيقاف من قبل المستخدم
+                raise StopByUserException()
 
             best_result = min(all_results, key=lambda x: x['cost'])
+
+            # === التحقق النهائي قبل التسجيل: هل تم طلب الإيقاف؟ ===
+            # هذا يعالج الحالة التي ينتهي فيها آخر تكرار قبل أن تتحقق الحلقة من إشارة الإيقاف
+            if scheduling_state.get('should_stop'):
+                raise StopByUserException()
+
+            # ================== بداية كود تسجيل الأداء ==================
+            if settings_profile_name and settings_profile_name != 'إعدادات حالية':
+                try:
+                    execution_time = time.time() - start_time
+                    final_failures = best_result.get('failures', [])
+                    
+                    unplaced_count = len([f for f in final_failures if "نقص" in f.get('reason', '')])
+                    hard_errors = len([f for f in final_failures if f.get('penalty', 0) >= 100 and "نقص" not in f.get('reason', '')])
+                    soft_errors = len([f for f in final_failures if 0 < f.get('penalty', 0) < 100])
+                    total_cost = best_result.get('cost', 0)
+
+                    # --- ✨ الجزء الجديد والمكتمل: جمع إعدادات الخوارزمية المستخدمة ---
+                    algo_settings = settings.get('algorithm_settings', {})
+                    algorithm_name = algo_settings.get('method', 'unknown')
+                    params_to_save = {}
+
+                    if algorithm_name == 'genetic_algorithm':
+                        params_to_save = {
+                            "الجيل": algo_settings.get('ga_population_size'),
+                            "الأجيال": algo_settings.get('ga_generations'),
+                            "الطفرة(%)": algo_settings.get('ga_mutation_rate'),
+                            "النخبة": algo_settings.get('ga_elitism_count')
+                        }
+                    elif algorithm_name == 'tabu_search':
+                        params_to_save = {
+                            "التكرارات": algo_settings.get('tabu_iterations'),
+                            "الذاكرة": algo_settings.get('tabu_tenure'),
+                            "الجوار": algo_settings.get('tabu_neighborhood_size')
+                        }
+                    # ✨ --- بداية الإضافة الجديدة --- ✨
+                    elif algorithm_name == 'memetic_algorithm':
+                        params_to_save = {
+                            "الجيل": algo_settings.get('ma_population_size'),
+                            "الأجيال": algo_settings.get('ma_generations'),
+                            "الطفرة(%)": algo_settings.get('ma_mutation_rate'),
+                            "النخبة": algo_settings.get('ma_elitism_count'),
+                            "التكرار المحلي": algo_settings.get('ma_local_search_iterations')
+                        }
+                    elif algorithm_name == 'clonalg':
+                        params_to_save = {
+                            "السكان": algo_settings.get('clonalg_population_size'),
+                            "الأجيال": algo_settings.get('clonalg_generations'),
+                            "النخبة": algo_settings.get('clonalg_selection_size'),
+                            "الاستنساخ": algo_settings.get('clonalg_clone_factor')
+                        }
+                    elif algorithm_name == 'large_neighborhood_search':
+                        params_to_save = {
+                            "التكرارات": algo_settings.get('lns_iterations'),
+                            "التخريب(%)": algo_settings.get('lns_ruin_factor')
+                        }
+                    elif algorithm_name == 'variable_neighborhood_search' or algorithm_name == 'vns_flexible':
+                        params_to_save = {
+                            "التكرارات": algo_settings.get('vns_iterations'),
+                            "أقصى جوار (k)": algo_settings.get('vns_k_max')
+                        }
+                    elif algorithm_name == 'hyper_heuristic':
+                        llh_list = algo_settings.get('hh_selected_llh', [])
+                        # تحويل قائمة الخوارزميات إلى نص للعرض
+                        llh_str = ", ".join(llh_list)
+                        params_to_save = {
+                            "الدورات": algo_settings.get('hh_iterations'),
+                            "الخوارزميات": llh_str
+                        }
+                    # ✨ --- نهاية الإضافة الجديدة --- ✨
+
+                    params_json = json.dumps(params_to_save, ensure_ascii=False) if params_to_save else None
+                    # --- نهاية الجزء الجديد والمكتمل ---
+
+                    # إنشاء اتصال جديد بقاعدة البيانات (ضروري لأنه يعمل في thread منفصل)
+                    conn_log = sqlite3.connect(DATABASE_FILE)
+                    cursor_log = conn_log.cursor()
+
+                    cursor_log.execute('''
+                        INSERT INTO performance_log (settings_name, algorithm_name, unplaced_count, hard_errors, soft_errors, total_cost, execution_time, algorithm_params)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (settings_profile_name, algorithm_name, unplaced_count, hard_errors, soft_errors, total_cost, execution_time, params_json))
+                    conn_log.commit()
+                    conn_log.close()
+                    log_q.put(f"   - تم تسجيل أداء الخوارزمية '{algorithm_name}' للإعدادات '{settings_profile_name}'.")
+                except Exception as log_e:
+                    log_q.put(f"   - تحذير: فشل تسجيل أداء الخوارزمية. الخطأ: {str(log_e)}")
+            # ================== نهاية كود تسجيل الأداء ==================
             
              # --- بداية الإضافة الثانية: حساب عدد المواد الموزعة فعليياً لكل مستوى ---
             placed_level_counts = defaultdict(int)
@@ -3166,6 +3283,7 @@ def generate_schedule():
     # ------ بداية منطق الاستدعاء من خارج المهمة الخلفية ------
     SCHEDULING_STATE['should_stop'] = False
     settings = request.get_json()
+    settings_profile_name = settings.get('settings_profile_name', 'إعدادات حالية') # قيمة افتراضية إذا لم يتم الحفظ
     courses = get_courses().get_json()
     rooms_data = get_rooms().get_json()
     all_levels = get_levels().get_json()
@@ -3178,7 +3296,8 @@ def generate_schedule():
 
     # Note that we are passing log_queue instead of socketio now
     executor.submit(
-        run_scheduling_task, 
+        run_scheduling_task,
+        settings_profile_name, 
         settings, 
         courses, 
         rooms_data, 
@@ -5357,6 +5476,56 @@ def refine_and_compact_schedule(
 # === ✨✨ نهاية الدالة الجديدة ✨✨ ===
 # ==============================================================================
 
+@app.route('/api/performance-report', methods=['GET'])
+def get_performance_report():
+    settings_name = request.args.get('settings')
+    if not settings_name:
+        return jsonify({"error": "اسم الإعدادات مطلوب."}), 400
+
+    try:
+        # ✨ تعديل الاستعلام ليشمل العمود الجديد
+        query = """
+            WITH RankedRuns AS (
+                SELECT
+                    id, settings_name, algorithm_name, unplaced_count,
+                    hard_errors, soft_errors, total_cost, execution_time,
+                    timestamp, algorithm_params,
+                    ROW_NUMBER() OVER (PARTITION BY algorithm_name, algorithm_params ORDER BY timestamp DESC) as rn
+                FROM performance_log
+                WHERE settings_name = ?
+            )
+            SELECT
+                algorithm_name, unplaced_count, hard_errors, soft_errors,
+                total_cost, execution_time, timestamp, algorithm_params
+            FROM RankedRuns
+            WHERE rn <= 5
+            ORDER BY algorithm_name, algorithm_params, timestamp DESC;
+        """
+        
+        raw_results = query_db(query, (settings_name,))
+
+        # ✨ إعادة هيكلة البيانات لتجميعها حسب الخوارزمية وإعداداتها
+        performance_by_config = defaultdict(list)
+        for row in raw_results:
+            params_str = ""
+            if row.get('algorithm_params'):
+                try:
+                    params_dict = json.loads(row['algorithm_params'])
+                    # تحويل القاموس إلى نص منسق
+                    params_str = " (" + "، ".join([f"{k}={v}" for k, v in params_dict.items()]) + ")"
+                except json.JSONDecodeError:
+                    pass # تجاهل إذا كانت البيانات غير صالحة
+            
+            # المفتاح الآن هو اسم الخوارزمية + إعداداتها
+            config_key = f"{row['algorithm_name']}{params_str}"
+            performance_by_config[config_key].append(dict(row))
+        
+        return jsonify(performance_by_config)
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": f"حدث خطأ في جلب التقرير: {str(e)}"}), 500
+
 @app.route('/api/validate-schedule', methods=['POST'])
 def validate_schedule_api():
     """
@@ -5765,7 +5934,35 @@ def load_schedule_result(slot_id):
         return jsonify({"error": f"حدث خطأ أثناء الاستعادة: {str(e)}"}), 500
 # ========================================================================================================
 
+@app.route('/api/performance-report/all-names', methods=['GET'])
+def get_all_performance_report_names():
+    """
+    يجلب قائمة فريدة بكل أسماء الإعدادات التي لها سجلات أداء محفوظة.
+    """
+    try:
+        # DISTINCT تضمن عدم تكرار الأسماء
+        names_data = query_db("SELECT DISTINCT settings_name FROM performance_log ORDER BY settings_name")
+        names_list = [row['settings_name'] for row in names_data]
+        return jsonify(names_list)
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": f"فشل جلب أسماء التقارير: {str(e)}"}), 500
 
+@app.route('/api/performance-report/delete-by-name', methods=['POST'])
+def delete_performance_reports_by_name():
+    """
+    يحذف كل سجلات الأداء المرتبطة باسم إعدادات معين.
+    """
+    data = request.get_json()
+    settings_name = data.get('name')
+    if not settings_name:
+        return jsonify({"error": "اسم الإعدادات للحذف مفقود."}), 400
+    try:
+        execute_db("DELETE FROM performance_log WHERE settings_name = ?", (settings_name,))
+        return jsonify({"success": True, "message": f"تم حذف جميع تقارير الأداء الخاصة بـ '{settings_name}' بنجاح."})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": f"فشل حذف التقارير: {str(e)}"}), 500
 
 if __name__ == '__main__':
     # --- بداية التعديل ---
