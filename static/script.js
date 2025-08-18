@@ -2050,8 +2050,13 @@ function setupModalListeners() {
     const helpBtn = document.getElementById("help-button");
     const aboutBtn = document.getElementById("about-button");
     
+    if (!helpModal || !performanceModal || !helpBtn || !aboutBtn) {
+        console.error("One or more modal elements are missing from the DOM.");
+        return; // إيقاف الدالة لتجنب الأخطاء
+    }
     
     helpBtn.addEventListener('click', () => helpModal.style.display = "block");
+    aboutBtn.addEventListener('click', () => alert("Copyright (C) 2025 CHAIB YAHIA"));
 
     // ... (كود زر الإغلاق الخاص بنافذة المساعدة)
     const helpCloseBtn = helpModal.querySelector(".close-btn");
