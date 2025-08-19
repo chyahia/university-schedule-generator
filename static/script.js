@@ -2090,32 +2090,27 @@ function addSlotUI(container, slotData = {}) {
 
     const headerDiv = document.createElement('div');
     headerDiv.className = 'slot-header';
-    headerDiv.innerHTML = `
-        <div class="time-inputs">
-            <input type="time" required value="${startTime}">
-            <span>-</span>
-            <input type="time" required value="${endTime}">
-        </div>
-        <div class="slot-actions">
-            <button type="button" class="add-rule-btn">+ إضافة قيد</button>
-            <button type="button" class="remove-slot-btn" title="حذف الفترة">&times;</button>
-        </div>
+
+    // --- بداية التعديل: إنشاء حاوية جديدة لعناصر التحكم ---
+    const headerControls = document.createElement('div');
+    headerControls.className = 'slot-header-controls';
+
+    const timeInputsDiv = document.createElement('div');
+    timeInputsDiv.className = 'time-inputs';
+    timeInputsDiv.innerHTML = `
+        <input type="time" required value="${startTime}">
+        <span>-</span>
+        <input type="time" required value="${endTime}">
     `;
-    slotDiv.appendChild(headerDiv);
 
+    // إنشاء القائمة المنسدلة هنا
     const pinnedCourseSelect = document.createElement('select');
-    pinnedCourseSelect.className = 'pinned-course-select';
-    pinnedCourseSelect.style.width = '100%';
-    pinnedCourseSelect.style.marginTop = '10px';
-    pinnedCourseSelect.style.padding = '8px';
+    pinnedCourseSelect.className = 'pinned-course-select'; // استخدام كلاس فقط
     pinnedCourseSelect.title = 'اختر مادة لتثبيتها في هذه الفترة الزمنية. سيتم تجاهلها إذا لم تكن مسندة لأستاذ.';
-
-    let optionsHTML = '<option value="">-- تثبيت مادة (اختياري) --</option>';
     
-    // === بداية التعديل: استخدام allAvailableCourses مباشرة ===
+    let optionsHTML = '<option value="">-- تثبيت مادة (اختياري) --</option>';
     if (allAvailableCourses && allAvailableCourses.length > 0) {
         allAvailableCourses.forEach(course => {
-    // === نهاية التعديل ===
             const teacherName = course.teacher_name || 'غير مسند';
             const courseText = `${course.name} (${teacherName}) - [${(course.levels || []).join(',')}]`;
             const isSelected = slotData.pinnedCourseId === course.id ? 'selected' : '';
@@ -2123,7 +2118,23 @@ function addSlotUI(container, slotData = {}) {
         });
     }
     pinnedCourseSelect.innerHTML = optionsHTML;
-    slotDiv.appendChild(pinnedCourseSelect);
+
+    // إضافة حقول الوقت والقائمة المنسدلة إلى الحاوية الجديدة
+    headerControls.appendChild(timeInputsDiv);
+    headerControls.appendChild(pinnedCourseSelect);
+    // --- نهاية التعديل ---
+
+    const slotActionsDiv = document.createElement('div');
+    slotActionsDiv.className = 'slot-actions';
+    slotActionsDiv.innerHTML = `
+        <button type="button" class="add-rule-btn">+ إضافة قيد</button>
+        <button type="button" class="remove-slot-btn" title="حذف الفترة">&times;</button>
+    `;
+
+    // إضافة حاوية التحكم والأزرار إلى شريط الرأس
+    headerDiv.appendChild(headerControls);
+    headerDiv.appendChild(slotActionsDiv);
+    slotDiv.appendChild(headerDiv);
 
     const rulesContainer = document.createElement('div');
     rulesContainer.className = 'rules-container';
@@ -2139,7 +2150,6 @@ function addSlotUI(container, slotData = {}) {
     container.appendChild(slotDiv);
     return slotDiv;
 }
-
 
 function addRuleUI(container, ruleData = {}) {
     const ruleDiv = document.createElement('div');

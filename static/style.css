@@ -1266,3 +1266,59 @@ body.body-sidebar-visible main {
 }
 /* ✨✨ --- نهاية الإضافة --- ✨✨ */
 
+/* ========================================================== */
+/* === (تخطيط عمودي) تصميم شريط رأس الفترة الزمنية (المرحلة 4) === */
+/* ========================================================== */
+
+/* 1. تغيير الحاوية الرئيسية إلى التخطيط العمودي */
+.slot-header {
+    flex-direction: column; /* الأهم: تغيير الاتجاه إلى عمودي */
+    align-items: stretch;   /* جعل العناصر الداخلية تمتد بعرض الحاوية */
+    gap: 10px;              /* تحديد المسافة العمودية بين العناصر */
+    padding: 15px;
+}
+
+/* 2. إلغاء بعض التنسيقات القديمة التي لم نعد بحاجتها */
+.slot-header-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* 3. تنسيق حقول الوقت لتظهر بشكل مناسب */
+.slot-header .time-inputs {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.slot-header .time-inputs input {
+    width: 45%; /* كل حقل يأخذ جزءاً من المساحة */
+    padding: 8px;
+    font-size: 14px;
+    border: 1px solid #90caf9;
+}
+
+/* 4. تنسيق القائمة المنسدلة لتأخذ العرض الكامل */
+.slot-header .pinned-course-select {
+    width: 100%;      /* جعلها تمتد بالعرض الكامل */
+    min-width: unset; /* إلغاء الحد الأدنى السابق */
+    padding: 8px;
+    font-size: 14px;
+    border: 1px solid #90caf9;
+    background-color: white;
+    border-radius: 4px;
+}
+
+/* 5. تنسيق حاوية أزرار الإجراءات */
+.slot-header .slot-actions {
+    display: flex;
+    width: 100%;
+    gap: 10px;
+    margin-top: 5px; /* إضافة مسافة علوية صغيرة */
+}
+
+/* 6. جعل الأزرار تأخذ مساحة متساوية */
+.slot-header .slot-actions button {
+    flex-grow: 1; /* جعل كل زر يأخذ نصف المساحة */
+}
+
