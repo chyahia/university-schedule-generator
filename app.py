@@ -806,7 +806,7 @@ def run_tabu_search(
     identifiers_by_level, special_constraints, teacher_constraints, distribution_rule_type, 
     lectures_by_teacher_map, globally_unavailable_slots, saturday_teachers, teacher_pairs, 
     day_to_idx, rules_grid, scheduling_state, last_slot_restrictions, 
-    level_specific_large_rooms, specific_small_room_assignments, constraint_severities, 
+    level_specific_large_rooms, specific_small_room_assignments, constraint_severities, algorithm_settings=None,
     max_sessions_per_day=None, initial_solution=None, max_iterations=1000, 
     tabu_tenure=10, neighborhood_size=50, consecutive_large_hall_rule="none", 
     progress_channel=None, prefer_morning_slots=False, use_strict_hierarchy=False, non_sharing_teacher_pairs=[]
@@ -817,6 +817,10 @@ def run_tabu_search(
     ثم تنتقل إلى الأخطاء المرنة والاستكشاف العشوائي.
     """
     log_q.put("--- بدء البحث المحظور (النسخة الموجهة بالأخطاء) ---")
+
+    # ✨✨ --- إضافة سطر أمان --- ✨✨
+    if algorithm_settings is None:
+        algorithm_settings = {}
     
     # --- إعدادات أولية ---
     # تحديد الفترات الزمنية المتاحة بشكل عام ولكل أستاذ على حدة
@@ -870,6 +874,18 @@ def run_tabu_search(
     log_q.put(f"البحث المحظور: اللياقة الأولية (نقص, صارم, مرن) = ({unplaced}, {hard}, {soft})")
     
     tabu_list = deque(maxlen=tabu_tenure)
+
+    # --- ✨ بداية تهيئة متغيرات الركود من الإعدادات ---
+    stagnation_threshold_percent = int(algorithm_settings.get('tabu_stagnation_threshold', 15))
+    initial_diversification_intensity = int(algorithm_settings.get('tabu_stagnation_initial', 3))
+    diversification_increment = int(algorithm_settings.get('tabu_stagnation_increment', 2))
+    MAX_DIVERSIFICATION_INTENSITY = int(algorithm_settings.get('tabu_stagnation_max', 10))
+
+    stagnation_counter = 0
+    last_best_fitness = best_fitness
+    STAGNATION_LIMIT = max(30, int(max_iterations * (stagnation_threshold_percent / 100.0)))
+    current_diversification_intensity = initial_diversification_intensity
+    # --- ✨ نهاية التهيئة ---
     
     # --- حلقة البحث الرئيسية ---
     for i in range(max_iterations):
@@ -1050,6 +1066,47 @@ def run_tabu_search(
             progress_percentage = calculate_progress_percentage(errors_for_best)
             log_q.put(f"PROGRESS:{progress_percentage:.1f}")
 
+        # --- ✨ بداية المنطق المحدث لمعالجة الركود التصاعدي ---
+        if best_fitness > last_best_fitness:
+            stagnation_counter = 0
+            current_diversification_intensity = initial_diversification_intensity
+        else:
+            stagnation_counter += 1
+
+        last_best_fitness = best_fitness
+
+        if stagnation_counter >= STAGNATION_LIMIT:
+            log_q.put(f"   >>> ⚠️ تم كشف الركود لـ {STAGNATION_LIMIT} دورة. تطبيق طفرة بقوة {current_diversification_intensity} أساتذة...")
+
+            current_solution = mutate(
+                best_solution, all_lectures, days, slots, rooms_data, teachers, levels,
+                teacher_constraints, special_constraints, identifiers_by_level, rules_grid, lectures_by_teacher_map,
+                globally_unavailable_slots, saturday_teachers, day_to_idx, 
+                level_specific_large_rooms, specific_small_room_assignments, constraint_severities, consecutive_large_hall_rule, 
+                prefer_morning_slots,
+                extra_teachers_on_hard_error=current_diversification_intensity,
+                soft_error_shake_probability=0.5,
+                non_sharing_teacher_pairs=non_sharing_teacher_pairs
+            )
+
+            current_fitness, _ = calculate_fitness(
+                current_solution, all_lectures, days, slots, teachers, rooms_data, levels, 
+                identifiers_by_level, special_constraints, teacher_constraints, distribution_rule_type, 
+                lectures_by_teacher_map, globally_unavailable_slots, saturday_teachers, teacher_pairs, 
+                day_to_idx, rules_grid, last_slot_restrictions, level_specific_large_rooms, 
+                specific_small_room_assignments, constraint_severities=constraint_severities, use_strict_hierarchy=use_strict_hierarchy, 
+                max_sessions_per_day=max_sessions_per_day, consecutive_large_hall_rule=consecutive_large_hall_rule, 
+                prefer_morning_slots=prefer_morning_slots, non_sharing_teacher_pairs=non_sharing_teacher_pairs
+            )
+
+            tabu_list.clear()
+
+            # ✨ استخدام مقدار الزيادة من الإعدادات
+            current_diversification_intensity = min(MAX_DIVERSIFICATION_INTENSITY, current_diversification_intensity + diversification_increment)
+
+            stagnation_counter = 0
+        # --- ✨ نهاية المنطق المحدث ---
+
     # --- الجزء الختامي ---
     log_q.put('انتهى البحث المحظور.')
 
@@ -1161,6 +1218,15 @@ def run_genetic_algorithm(log_q, lectures_to_schedule, days, slots, rooms_data, 
     # --- ✨ بداية الإضافة: متغيرات كشف الركود --- ✨
     stagnation_counter = 0
     last_best_fitness = (-float('inf'), -float('inf'), -float('inf'))
+
+    # --- ✨ بداية إضافة متغيرات الطفرة التكيفية ---
+    base_mutation_rate = ga_mutation_rate  # المعدل الأساسي الذي يحدده المستخدم
+    current_mutation_rate = base_mutation_rate
+    STAGNATION_THRESHOLD = 15  # عدد الأجيال بدون تحسن قبل زيادة الطفرة
+    MAX_MUTATION_RATE = 0.20  # 20% كحد أقصى للطفرة
+    MIN_MUTATION_RATE = 0.01  # 1% كحد أدنى للطفرة
+    # --- ✨ نهاية الإضافة ---
+
     # نحدد حد الركود (مثلاً 25% من الأجيال أو 15 جيل كحد أدنى)
     STAGNATION_LIMIT = max(15, int(ga_generations * 0.15))
     # --- ✨ نهاية الإضافة --- ✨
@@ -1199,33 +1265,37 @@ def run_genetic_algorithm(log_q, lectures_to_schedule, days, slots, rooms_data, 
         
         population_with_fitness.sort(key=lambda item: item[1], reverse=True)
 
-        # تحديث أفضل حل تم العثور عليه إذا وجدنا حلاً أفضل في هذا الجيل
+        # --- ✨ بداية الكود الجديد والمعدل ---
+        # تحديث أفضل حل تم العثور عليه
         if population_with_fitness[0][1] > best_fitness_so_far:
             best_fitness_so_far = population_with_fitness[0][1]
             best_solution_so_far = copy.deepcopy(population_with_fitness[0][0])
             if progress_channel: progress_channel['best_solution_so_far'] = best_solution_so_far
-            # نرسل رسالة خاصة ومميزة فقط عند حدوث تحسن فعلي
-            
-            
-            log_q.put(f'   >>> إنجاز جديد! أفضل أخطاء = ({-best_fitness_so_far[0]}, {-best_fitness_so_far[1]}, {-best_fitness_so_far[2]})')
-            
-            # --- ✨✨ بداية الكود الجديد لحساب التقدم --- ✨✨
-            # 1. نستدعي الدالة مرة أخرى للحصول على قائمة الأخطاء التفصيلية للحل الأفضل
-            _, errors_for_best = calculate_fitness(best_solution_so_far, lectures_to_schedule, days, slots, teachers, rooms_data, all_levels, identifiers_by_level, special_constraints, teacher_constraints, distribution_rule_type, lectures_by_teacher_map, globally_unavailable_slots, saturday_teachers, teacher_pairs, day_to_idx, rules_grid, last_slot_restrictions, level_specific_large_rooms, specific_small_room_assignments, constraint_severities, max_sessions_per_day=max_sessions_per_day, prefer_morning_slots=prefer_morning_slots, use_strict_hierarchy=use_strict_hierarchy, non_sharing_teacher_pairs=non_sharing_teacher_pairs)
 
-            # 2. الآن نستخدم الدالة المساعدة الجديدة مع قائمة الأخطاء
+            log_q.put(f'   >>> إنجاز جديد! أفضل أخطاء = ({-best_fitness_so_far[0]}, {-best_fitness_so_far[1]}, {-best_fitness_so_far[2]})')
+
+            _, errors_for_best = calculate_fitness(best_solution_so_far, lectures_to_schedule, days, slots, teachers, rooms_data, all_levels, identifiers_by_level, special_constraints, teacher_constraints, distribution_rule_type, lectures_by_teacher_map, globally_unavailable_slots, saturday_teachers, teacher_pairs, day_to_idx, rules_grid, last_slot_restrictions, level_specific_large_rooms, specific_small_room_assignments, constraint_severities, max_sessions_per_day=max_sessions_per_day, prefer_morning_slots=prefer_morning_slots, use_strict_hierarchy=use_strict_hierarchy, non_sharing_teacher_pairs=non_sharing_teacher_pairs)
             progress_percentage = calculate_progress_percentage(errors_for_best)
             log_q.put(f"PROGRESS:{progress_percentage:.1f}")
-            # --- ✨✨ نهاية الكود الجديد --- ✨✨
 
-        # --- ✨ بداية الإضافة: تحديث عداد الركود --- ✨
-        if best_fitness_so_far == last_best_fitness:
-            stagnation_counter += 1
+        # تحديث عداد الركود ومنطق الطفرة التكيفية
+        # --- ✨ بداية الكود الجديد والصحيح --- ✨
+        if best_fitness_so_far > last_best_fitness:
+            # 1. حدث تحسن
+            stagnation_counter = 0  # أعد تصفير عداد الركود
+            current_mutation_rate = base_mutation_rate  # ✨ الأهم: أعد الطفرة إلى قيمتها الأساسية
+            log_q.put(f'   - (تكيف) حدث تحسن، تم إعادة الطفرة إلى المعدل الأساسي {current_mutation_rate:.2%}')
         else:
-            # إذا كان هناك تحسن، نعيد تصفير العداد
-            stagnation_counter = 0
+            # 2. لم يحدث تحسن (ركود)
+            stagnation_counter += 1
+            # تحقق مما إذا كنا قد وصلنا إلى عتبة الركود
+            if stagnation_counter > 0 and stagnation_counter % STAGNATION_THRESHOLD == 0:
+                current_mutation_rate = min(MAX_MUTATION_RATE, current_mutation_rate * 2)
+                log_q.put(f'   - (تكيف) البحث عالق، تم رفع معدل الطفرة إلى {current_mutation_rate:.2%}')
+
         last_best_fitness = best_fitness_so_far
-        # --- ✨ نهاية الإضافة --- ✨
+        # --- ✨ نهاية الكود الجديد والصحيح --- ✨
+        
         
         if best_fitness_so_far == (0, 0, 0):
             log_q.put('   - تم العثور على حل مثالي! إنهاء البحث.')
@@ -1242,7 +1312,7 @@ def run_genetic_algorithm(log_q, lectures_to_schedule, days, slots, rooms_data, 
             parent2 = select_one_parent_tournament(population_with_fitness)
             child1, child2 = crossover(parent1, parent2, all_levels, days, slots)
             # تطبيق الطفرة الاحتمالية على الابن الأول
-            if random.random() < ga_mutation_rate:
+            if random.random() < current_mutation_rate:
                 mutated_child1 = mutate(
                     child1, lectures_to_schedule, days, slots, rooms_data, teachers, all_levels,
                     teacher_constraints, special_constraints, identifiers_by_level, rules_grid, lectures_by_teacher_map,
@@ -1258,7 +1328,7 @@ def run_genetic_algorithm(log_q, lectures_to_schedule, days, slots, rooms_data, 
 
             # تطبيق الطفرة الاحتمالية على الابن الثاني
             if len(next_generation) < ga_population_size:
-                if random.random() < ga_mutation_rate:
+                if random.random() < current_mutation_rate:
                     mutated_child2 = mutate(
                         child2, lectures_to_schedule, days, slots, rooms_data, teachers, all_levels,
                         teacher_constraints, special_constraints, identifiers_by_level, rules_grid, lectures_by_teacher_map,
@@ -1569,7 +1639,8 @@ def run_hyper_heuristic(
             if 'all_levels' in base_params: base_params['levels'] = base_params.pop('all_levels')
             specific_params = {
                 "tabu_tenure": int(algorithm_settings.get('tabu_tenure', 10)), "neighborhood_size": int(algorithm_settings.get('tabu_neighborhood_size', 50)),
-                "initial_solution": copy.deepcopy(current_solution)
+                "initial_solution": copy.deepcopy(current_solution),
+                "algorithm_settings": algorithm_settings
             }
         elif action == "Memetic_Algorithm":
             if 'all_lectures' in base_params: base_params['lectures_to_schedule'] = base_params.pop('all_lectures')
@@ -1900,6 +1971,14 @@ def run_memetic_algorithm(log_q, lectures_to_schedule, days, slots, rooms_data, 
     last_best_fitness = (-float('inf'), -float('inf'), -float('inf'))
     STAGNATION_LIMIT = max(15, int(ma_generations * 0.15))
 
+    # --- ✨ بداية إضافة متغيرات الطفرة التكيفية ---
+    base_mutation_rate = ma_mutation_rate  # المعدل الأساسي
+    current_mutation_rate = base_mutation_rate
+    STAGNATION_THRESHOLD = 15  # عدد الأجيال بدون تحسن
+    MAX_MUTATION_RATE = 0.25  # يمكن أن نجعله أعلى قليلاً في الميميتيك (25%)
+    MIN_MUTATION_RATE = 0.02  # (2%)
+    # --- ✨ نهاية الإضافة ---
+
     # 2. حلقة التطور عبر الأجيال
     for gen in range(ma_generations):
         if scheduling_state.get('should_stop'):
@@ -1927,23 +2006,33 @@ def run_memetic_algorithm(log_q, lectures_to_schedule, days, slots, rooms_data, 
 
         population_with_fitness.sort(key=lambda item: item[1], reverse=True)
 
+       # --- ✨ بداية الكود الجديد والمعدل ---
         if population_with_fitness[0][1] > best_fitness_so_far:
             best_solution_so_far, best_fitness_so_far, best_failures_list = population_with_fitness[0]
-            best_solution_so_far = copy.deepcopy(best_solution_so_far) # ننسخ الحل فقط
-            
-            if progress_channel: progress_channel['best_solution_so_far'] = best_solution_so_far
+            best_solution_so_far = copy.deepcopy(best_solution_so_far)
 
+            if progress_channel: progress_channel['best_solution_so_far'] = best_solution_so_far
             log_q.put(f'   >>> إنجاز جديد! أفضل أخطاء = ({-best_fitness_so_far[0]}, {-best_fitness_so_far[1]}, {-best_fitness_so_far[2]})')
 
-            # لا حاجة لإعادة الحساب، نستخدم القائمة المحفوظة مباشرة
             progress_percentage = calculate_progress_percentage(best_failures_list)
             log_q.put(f"PROGRESS:{progress_percentage:.1f}")
 
-        if best_fitness_so_far == last_best_fitness:
-            stagnation_counter += 1
-        else:
+        # --- ✨ بداية الكود الجديد والصحيح --- ✨
+        if best_fitness_so_far > last_best_fitness:
+            # 1. حدث تحسن
             stagnation_counter = 0
+            current_mutation_rate = base_mutation_rate
+            log_q.put(f'   - (تكيف) حدث تحسن، تم إعادة الطفرة إلى المعدل الأساسي {current_mutation_rate:.2%}')
+        else:
+            # 2. لم يحدث تحسن (ركود)
+            stagnation_counter += 1
+            if stagnation_counter > 0 and stagnation_counter % STAGNATION_THRESHOLD == 0:
+                current_mutation_rate = min(MAX_MUTATION_RATE, current_mutation_rate * 2)
+                log_q.put(f'   - (تكيف) البحث عالق، تم رفع معدل الطفرة إلى {current_mutation_rate:.2%}')
+
         last_best_fitness = best_fitness_so_far
+        # --- ✨ نهاية الكود الجديد والصحيح --- ✨
+        
 
         if best_fitness_so_far == (0, 0, 0):
             log_q.put('   - تم العثور على حل مثالي! إنهاء البحث.')
@@ -1959,7 +2048,7 @@ def run_memetic_algorithm(log_q, lectures_to_schedule, days, slots, rooms_data, 
             parent2 = select_one_parent_tournament(population_with_fitness)
             child1, child2 = crossover(parent1, parent2, all_levels, days, slots)
 
-            if random.random() < ma_mutation_rate:
+            if random.random() < current_mutation_rate:
                 mutated_child1 = mutate(
                     child1, lectures_to_schedule, days, slots, rooms_data, teachers, all_levels,
                     teacher_constraints, special_constraints, identifiers_by_level, rules_grid, lectures_by_teacher_map,
@@ -1982,7 +2071,7 @@ def run_memetic_algorithm(log_q, lectures_to_schedule, days, slots, rooms_data, 
             next_generation.append(improved_child1)
 
             if len(next_generation) < ma_population_size:
-                if random.random() < ma_mutation_rate:
+                if random.random() < current_mutation_rate:
                     mutated_child2 = mutate(
                         child2, lectures_to_schedule, days, slots, rooms_data, teachers, all_levels,
                         teacher_constraints, special_constraints, identifiers_by_level, rules_grid, lectures_by_teacher_map,
@@ -2262,6 +2351,90 @@ def mutate(
     return mutated_schedule
 
 
+# ======================== بداية الدالة المساعدة الجديدة ========================
+def run_greedy_search_for_best_result(
+    log_q, lectures_sorted, days, slots, rules_grid, rooms_data, teachers, all_levels,
+    teacher_constraints, globally_unavailable_slots, special_constraints,
+    primary_slots, reserve_slots, identifiers_by_level, prioritize_primary,
+    saturday_teachers, day_to_idx, level_specific_large_rooms,
+    specific_small_room_assignments, consecutive_large_hall_rule, prefer_morning_slots,
+    lectures_by_teacher_map, distribution_rule_type, teacher_pairs,
+    constraint_severities, non_sharing_teacher_pairs,
+    # معامل جديد لاستقبال الجدول المبدئي (مع المواد المثبتة)
+    base_initial_schedule=None
+):
+    """
+    تقوم بتشغيل الخوارزمية الطماعة 10 مرات وتختار أفضل نتيجة من حيث عدد المواد الناقصة ثم عدد الأخطاء.
+    """
+    best_result = {
+        "schedule": {level: [[[] for _ in slots] for _ in days] for level in all_levels},
+        "failures": [],
+        "unplaced_count": float('inf')
+    }
+    num_of_runs = 10
+    
+    for run in range(num_of_runs):
+        # في كل محاولة، ابدأ من الجدول المبدئي (الذي قد يحتوي على مواد مثبتة)
+        current_schedule = copy.deepcopy(base_initial_schedule) if base_initial_schedule else {level: [[[] for _ in slots] for _ in days] for level in all_levels}
+        current_teacher_schedule = {t['name']: set() for t in teachers}
+        current_room_schedule = {r['name']: set() for r in rooms_data}
+        
+        # إعادة بناء جداول الحجوزات من الجدول المبدئي
+        for grid in current_schedule.values():
+            for d_idx, day in enumerate(grid):
+                for s_idx, lectures in enumerate(day):
+                    for lec in lectures:
+                        if lec.get('teacher_name'): current_teacher_schedule[lec['teacher_name']].add((d_idx, s_idx))
+                        if lec.get('room'): current_room_schedule[lec.get('room')].add((d_idx, s_idx))
+
+        current_failures = []
+        current_unplaced_count = 0
+
+        for lecture in lectures_sorted:
+            # نتأكد من عدم جدولة المواد المثبتة مرة أخرى
+            is_already_placed = any(lec.get('id') == lecture['id'] for grid in current_schedule.values() for day in grid for slot in day for lec in slot)
+            if is_already_placed:
+                continue
+
+            success, message = find_slot_for_single_lecture(
+                lecture, current_schedule, current_teacher_schedule, current_room_schedule,
+                days, slots, rules_grid, rooms_data,
+                teacher_constraints, globally_unavailable_slots, special_constraints,
+                primary_slots, reserve_slots, identifiers_by_level,
+                prioritize_primary, saturday_teachers, day_to_idx, level_specific_large_rooms,
+                specific_small_room_assignments, consecutive_large_hall_rule,
+                prefer_morning_slots=prefer_morning_slots
+            )
+            if not success:
+                current_unplaced_count += 1
+                current_failures.append({
+                    "course_name": lecture.get('name'), "teacher_name": lecture.get('teacher_name'),
+                    "reason": message
+                })
+
+        greedy_validation_failures = validate_teacher_constraints_in_solution(
+            current_teacher_schedule, special_constraints, teacher_constraints,
+            lectures_by_teacher_map, distribution_rule_type, saturday_teachers,
+            teacher_pairs, day_to_idx, {}, len(slots), constraint_severities,
+            max_sessions_per_day=None, non_sharing_teacher_pairs=non_sharing_teacher_pairs
+        )
+        current_failures.extend(greedy_validation_failures)
+
+        log_q.put(f"   - المحاولة الطماعة {run + 1}/{num_of_runs}: اكتملت مع {current_unplaced_count} مواد ناقصة.")
+        time.sleep(0.05)
+
+        if current_unplaced_count < best_result['unplaced_count'] or \
+           (current_unplaced_count == best_result['unplaced_count'] and len(current_failures) < len(best_result['failures'])):
+            if current_unplaced_count < best_result['unplaced_count']:
+                 log_q.put(f"   >>> نتيجة أفضل! تم تقليل النقص إلى {current_unplaced_count}.")
+            
+            best_result['unplaced_count'] = current_unplaced_count
+            best_result['schedule'] = copy.deepcopy(current_schedule)
+            best_result['failures'] = copy.deepcopy(current_failures)
+
+    return best_result['schedule'], best_result['failures']
+# ========================= نهاية الدالة المساعدة الجديدة =========================
+
 # ابحث عن هذه الدالة في ملف app.py واستبدلها بالكامل بهذا الكود
 @app.route('/api/generate-schedule', methods=['POST'])
 def generate_schedule():
@@ -2459,17 +2632,19 @@ def generate_schedule():
                 # --- الجزء 5: تجهيز الحل المبدئي الطماع للخوارزميات المتقدمة (الجزء المفقود الثاني) ---
                 greedy_initial_schedule = None
                 if method in ['tabu_search', 'large_neighborhood_search', 'variable_neighborhood_search', 'memetic_algorithm', 'clonalg', 'genetic_algorithm', 'hyper_heuristic']:
-                    log_q.put(f"جاري تحضير حل مبدئي عبر الخوارزمية الطماعة لـ {method}...")
+                    log_q.put(f"جاري تحضير أفضل حل مبدئي (عبر 10 محاولات طماعة) لـ {method}...")
                     
-                    # ابدأ بالجداول التي قد تحتوي على مواد مثبتة
-                    greedy_initial_schedule = copy.deepcopy(initial_final_schedule)
-                    temp_teacher_schedule = copy.deepcopy(initial_teacher_schedule)
-                    temp_room_schedule = copy.deepcopy(initial_room_schedule)
-
-                    # استخدم القائمة المرتبة التي تم إنشاؤها لجدولة بقية المواد
-                    for lecture in lectures_sorted:
-                        # الخوارزمية الطماعة ستجد مكانًا للمحاضرات غير المثبتة
-                        find_slot_for_single_lecture(lecture, greedy_initial_schedule, temp_teacher_schedule, temp_room_schedule, days, slots, rules_grid, rooms_data, teacher_constraints, globally_unavailable_slots, special_constraints, primary_slots, reserve_slots, identifiers_by_level, prioritize_primary, saturday_teachers, day_to_idx, level_specific_large_rooms, specific_small_room_assignments, consecutive_large_hall_rule, prefer_morning_slots=prefer_morning_slots)
+                    # استدعاء الدالة المساعدة الجديدة للحصول على أفضل حل من 10 محاولات
+                    greedy_initial_schedule, _ = run_greedy_search_for_best_result(
+                        log_q, lectures_sorted, days, slots, rules_grid, rooms_data, teachers, all_levels,
+                        teacher_constraints, globally_unavailable_slots, special_constraints,
+                        primary_slots, reserve_slots, identifiers_by_level, prioritize_primary,
+                        saturday_teachers, day_to_idx, level_specific_large_rooms,
+                        specific_small_room_assignments, consecutive_large_hall_rule, prefer_morning_slots,
+                        lectures_by_teacher_map, distribution_rule_type, teacher_pairs,
+                        constraint_severities, non_sharing_teacher_pairs,
+                        base_initial_schedule=initial_final_schedule # تمرير المواد المثبتة
+                    )
                 
                 detailed_failures = []
                 # الموزع الرئيسي
@@ -2589,6 +2764,7 @@ def generate_schedule():
                             last_slot_restrictions,
                             level_specific_large_rooms,
                             specific_small_room_assignments, constraint_severities,
+                            algorithm_settings=algorithm_settings,
                             initial_solution=greedy_initial_schedule,
                             max_iterations=max_iterations,
                             tabu_tenure=tabu_tenure,
@@ -2726,7 +2902,8 @@ def generate_schedule():
                             day_to_idx, rules_grid, lns_iterations, lns_ruin_factor, prioritize_primary,
                             scheduling_state, last_slot_restrictions, level_specific_large_rooms, specific_small_room_assignments, constraint_severities,
                             max_sessions_per_day=max_sessions_per_day, consecutive_large_hall_rule=consecutive_large_hall_rule,
-                            prefer_morning_slots=prefer_morning_slots, use_strict_hierarchy=use_strict_hierarchy, non_sharing_teacher_pairs=non_sharing_teacher_pairs,
+                            prefer_morning_slots=prefer_morning_slots, use_strict_hierarchy=use_strict_hierarchy,
+                            non_sharing_teacher_pairs=non_sharing_teacher_pairs, initial_solution=greedy_initial_schedule,
                             mutation_hard_intensity=mutation_hard_intensity, mutation_soft_probability=mutation_soft_probability
                         )
                         
@@ -2771,7 +2948,8 @@ def generate_schedule():
                             day_to_idx, rules_grid, vns_iterations, vns_k_max, prioritize_primary,
                             scheduling_state, last_slot_restrictions, level_specific_large_rooms, specific_small_room_assignments, constraint_severities,
                             max_sessions_per_day=max_sessions_per_day, consecutive_large_hall_rule=consecutive_large_hall_rule,
-                            prefer_morning_slots=prefer_morning_slots, use_strict_hierarchy=use_strict_hierarchy, non_sharing_teacher_pairs=non_sharing_teacher_pairs,
+                            prefer_morning_slots=prefer_morning_slots, use_strict_hierarchy=use_strict_hierarchy,
+                            non_sharing_teacher_pairs=non_sharing_teacher_pairs, algorithm_settings=algorithm_settings, initial_solution=greedy_initial_schedule,
                             mutation_hard_intensity=mutation_hard_intensity, mutation_soft_probability=mutation_soft_probability
                         )
                         
@@ -2820,6 +2998,7 @@ def generate_schedule():
                             day_to_idx, rules_grid, vns_iterations, vns_k_max, prioritize_primary,
                             scheduling_state, last_slot_restrictions, level_specific_large_rooms, 
                             specific_small_room_assignments, constraint_severities, flexible_categories,
+                            algorithm_settings=algorithm_settings,
                             initial_schedule=final_schedule,
                             initial_teacher_schedule=teacher_schedule,
                             initial_room_schedule=room_schedule,
@@ -2967,82 +3146,22 @@ def generate_schedule():
                         final_schedule = {level: [[[] for _ in slots] for _ in days] for level in all_levels}
                 
                 elif method == 'greedy':
-                    # --- إعداد حلقة التكرار لاختيار أفضل نتيجة ---
-                    best_result = {
-                        "schedule": {level: [[[] for _ in slots] for _ in days] for level in all_levels},
-                        "failures": [],
-                        "unplaced_count": float('inf')
-                    }
-                    num_of_runs = 10  # يمكنك زيادة هذا الرقم للحصول على نتائج أفضل
-                    log_q.put(f"--- بدء الخوارزمية الطماعة (سيتم تشغيلها {num_of_runs} مرات لاختيار الأفضل) ---")
+                    log_q.put("--- بدء الخوارزمية الطماعة (سيتم تشغيلها 10 مرات لاختيار الأفضل) ---")
                     
-
-                    for run in range(num_of_runs):
-                        # --- إعادة تهيئة المتغيرات لكل محاولة جديدة ---
-                        current_schedule = {level: [[[] for _ in slots] for _ in days] for level in all_levels}
-                        current_teacher_schedule = {t['name']: set() for t in teachers}
-                        current_room_schedule = {r['name']: set() for r in rooms_data}
-                        current_failures = []
-                        current_unplaced_count = 0
-
-                        # ✅ --- التصحيح الجوهري: استخدام القائمة المرتبة lectures_sorted ---
-                        for lecture in lectures_sorted:
-                            success, message = find_slot_for_single_lecture(
-                                lecture, current_schedule, current_teacher_schedule, current_room_schedule,
-                                days, slots, rules_grid, rooms_data,
-                                teacher_constraints, globally_unavailable_slots, special_constraints,
-                                primary_slots, reserve_slots, identifiers_by_level,
-                                prioritize_primary, saturday_teachers, day_to_idx, level_specific_large_rooms, specific_small_room_assignments, consecutive_large_hall_rule, prefer_morning_slots=prefer_morning_slots
-                            )
-                            if not success:
-                                current_unplaced_count += 1
-                                current_failures.append({
-                                    "course_name": lecture.get('name'),
-                                    "teacher_name": lecture.get('teacher_name'),
-                                    "reason": message
-                                })
-
-                        # --- فحص القيود الإضافية لهذه المحاولة ---
-                        greedy_validation_failures = validate_teacher_constraints_in_solution(
-                            current_teacher_schedule, 
-                            special_constraints, 
-                            teacher_constraints,
-                            lectures_by_teacher_map, 
-                            distribution_rule_type,
-                            saturday_teachers, 
-                            teacher_pairs, 
-                            day_to_idx,
-                            last_slot_restrictions,
-                            num_slots,
-                            constraint_severities,
-                            max_sessions_per_day
-                        )
-                        current_failures.extend(greedy_validation_failures)
-
-                        
-                        log_q.put(f"   - المحاولة {run + 1}/{num_of_runs}: اكتملت مع وجود {current_unplaced_count} مواد ناقصة.")
-                        time.sleep(0.05)
-
-                        # --- تحديث أفضل نتيجة إذا كانت المحاولة الحالية أفضل ---
-                        if current_unplaced_count < best_result['unplaced_count']:
-                            log_q.put(f"   >>> نتيجة أفضل! تم تقليل النقص إلى {current_unplaced_count}.")
-                            
-                            best_result['unplaced_count'] = current_unplaced_count
-                            best_result['schedule'] = copy.deepcopy(current_schedule)
-                            best_result['failures'] = copy.deepcopy(current_failures)
-                        # إذا كان النقص متساويًا، نختار النتيجة ذات الأخطاء الأقل
-                        elif current_unplaced_count == best_result['unplaced_count'] and len(current_failures) < len(best_result['failures']):
-                            log_q.put(f"   >>> نتيجة أفضل! نفس النقص ({current_unplaced_count}) لكن بأخطاء أقل.")
-                            
-                            best_result['schedule'] = copy.deepcopy(current_schedule)
-                            best_result['failures'] = copy.deepcopy(current_failures)
-
-                    # --- بعد انتهاء كل المحاولات، نعتمد أفضل نتيجة تم العثور عليها ---
-                    final_schedule = best_result['schedule']
-                    failures = best_result['failures']
+                    # استدعاء الدالة المساعدة للحصول على أفضل حل وأخطائه
+                    final_schedule, failures = run_greedy_search_for_best_result(
+                        log_q, lectures_sorted, days, slots, rules_grid, rooms_data, teachers, all_levels,
+                        teacher_constraints, globally_unavailable_slots, special_constraints,
+                        primary_slots, reserve_slots, identifiers_by_level, prioritize_primary,
+                        saturday_teachers, day_to_idx, level_specific_large_rooms,
+                        specific_small_room_assignments, consecutive_large_hall_rule, prefer_morning_slots,
+                        lectures_by_teacher_map, distribution_rule_type, teacher_pairs,
+                        constraint_severities, non_sharing_teacher_pairs,
+                        base_initial_schedule=initial_final_schedule
+                    )
                     
-                    total_greedy_cost = len(failures)
-                    progress_percentage = max(0, (10 - total_greedy_cost) / 10 * 100)
+                    total_greedy_cost = sum(f.get('penalty', 1) for f in failures)
+                    progress_percentage = calculate_progress_percentage(failures)
                     log_q.put(f"PROGRESS:{progress_percentage:.1f}")
                     
                     detailed_failures = failures
@@ -4434,7 +4553,7 @@ def get_dashboard_stats():
 # =====================================================================
 # START: LARGE NEIGHBORHOOD SEARCH (LNS) - MODIFIED
 # =====================================================================
-def run_large_neighborhood_search(log_q, all_lectures, days, slots, rooms_data, teachers, all_levels, identifiers_by_level, special_constraints, teacher_constraints, distribution_rule_type, lectures_by_teacher_map, globally_unavailable_slots, saturday_teachers, teacher_pairs, day_to_idx, rules_grid, max_iterations, ruin_factor, prioritize_primary, scheduling_state, last_slot_restrictions, level_specific_large_rooms, specific_small_room_assignments, constraint_severities, max_sessions_per_day=None, consecutive_large_hall_rule="none", progress_channel=None, prefer_morning_slots=False, use_strict_hierarchy=False, non_sharing_teacher_pairs=[], mutation_hard_intensity=3, mutation_soft_probability=0.5):
+def run_large_neighborhood_search(log_q, all_lectures, days, slots, rooms_data, teachers, all_levels, identifiers_by_level, special_constraints, teacher_constraints, distribution_rule_type, lectures_by_teacher_map, globally_unavailable_slots, saturday_teachers, teacher_pairs, day_to_idx, rules_grid, max_iterations, ruin_factor, prioritize_primary, scheduling_state, last_slot_restrictions, level_specific_large_rooms, specific_small_room_assignments, constraint_severities, initial_solution=None, max_sessions_per_day=None, consecutive_large_hall_rule="none", progress_channel=None, prefer_morning_slots=False, use_strict_hierarchy=False, non_sharing_teacher_pairs=[], mutation_hard_intensity=3, mutation_soft_probability=0.5):
     
     # ✨ 1. إضافة الدالة المساعدة لتحويل اللياقة إلى درجة رقمية
     def fitness_tuple_to_score(fitness_tuple):
@@ -4454,19 +4573,12 @@ def run_large_neighborhood_search(log_q, all_lectures, days, slots, rooms_data, 
             is_primary = any(rule.get('rule_type') == 'SPECIFIC_LARGE_HALL' for rule in rules_grid[day_idx][slot_idx])
             (primary_slots if is_primary else reserve_slots).append((day_idx, slot_idx))
 
-    lectures_sorted_for_greedy = sorted(all_lectures, key=lambda lec: calculate_lecture_difficulty(lec, lectures_by_teacher_map.get(lec.get('teacher_name'), []), special_constraints, teacher_constraints), reverse=True)
-    
-    initial_schedule = {level: [[[] for _ in slots] for _ in days] for level in all_levels}
-    teacher_schedule_greedy = {t['name']: set() for t in teachers}
-    room_schedule_greedy = {r['name']: set() for r in rooms_data}
-    
-    unplaced_lectures_initial = []
-    for lecture in lectures_sorted_for_greedy:
-        success, message = find_slot_for_single_lecture(lecture, initial_schedule, teacher_schedule_greedy, room_schedule_greedy, days, slots, rules_grid, rooms_data, teacher_constraints, globally_unavailable_slots, special_constraints, primary_slots, reserve_slots, identifiers_by_level, prioritize_primary, saturday_teachers, day_to_idx, level_specific_large_rooms, specific_small_room_assignments, consecutive_large_hall_rule, prefer_morning_slots=prefer_morning_slots)
-        if not success:
-            unplaced_lectures_initial.append({"course_name": lecture.get('name'), "teacher_name": lecture.get('teacher_name'), "reason": message})
-
-    current_solution = initial_schedule
+    if not initial_solution:
+        log_q.put("تحذير: لم يتم توفير حل مبدئي لـ LNS. سيتم البدء بجدول فارغ.")
+        current_solution = {level: [[[] for _ in slots] for _ in days] for level in all_levels}
+    else:
+        log_q.put('   - LNS: الانطلاق من الحل المبدئي المحسّن.')
+        current_solution = copy.deepcopy(initial_solution)
     
     # ✨ 2. حساب اللياقة الأولية بدلًا من التكلفة
     initial_fitness, _ = calculate_fitness(
@@ -4653,7 +4765,7 @@ def run_variable_neighborhood_search(
     lectures_by_teacher_map, globally_unavailable_slots, saturday_teachers, teacher_pairs,
     day_to_idx, rules_grid, max_iterations, k_max, prioritize_primary,
     scheduling_state, last_slot_restrictions, level_specific_large_rooms,
-    specific_small_room_assignments, constraint_severities, max_sessions_per_day=None, consecutive_large_hall_rule="none", progress_channel=None, prefer_morning_slots=False, use_strict_hierarchy=False, non_sharing_teacher_pairs=[], mutation_hard_intensity=3, mutation_soft_probability=0.5):
+    specific_small_room_assignments, constraint_severities, algorithm_settings, initial_solution=None, max_sessions_per_day=None, consecutive_large_hall_rule="none", progress_channel=None, prefer_morning_slots=False, use_strict_hierarchy=False, non_sharing_teacher_pairs=[], mutation_hard_intensity=3, mutation_soft_probability=0.5):
 
     log_q.put('--- بدء VNS (معيار القبول الصارم) ---')
     
@@ -4665,13 +4777,13 @@ def run_variable_neighborhood_search(
             is_primary = any(rule.get('rule_type') == 'SPECIFIC_LARGE_HALL' for rule in rules_grid[day_idx][slot_idx])
             (primary_slots if is_primary else reserve_slots).append((day_idx, slot_idx))
 
-    lectures_sorted_for_greedy = sorted(all_lectures, key=lambda lec: calculate_lecture_difficulty(lec, lectures_by_teacher_map.get(lec.get('teacher_name'), []), special_constraints, teacher_constraints), reverse=True)
-    initial_schedule = {level: [[[] for _ in slots] for _ in days] for level in all_levels}
-    teacher_schedule_greedy, room_schedule_greedy = {t['name']: set() for t in teachers}, {r['name']: set() for r in rooms_data}
-    for lecture in lectures_sorted_for_greedy:
-        find_slot_for_single_lecture(lecture, initial_schedule, teacher_schedule_greedy, room_schedule_greedy, days, slots, rules_grid, rooms_data, teacher_constraints, globally_unavailable_slots, special_constraints, primary_slots, reserve_slots, identifiers_by_level, prioritize_primary, saturday_teachers, day_to_idx, level_specific_large_rooms, specific_small_room_assignments, consecutive_large_hall_rule, prefer_morning_slots=prefer_morning_slots)
+    if not initial_solution:
+        log_q.put("تحذير: لم يتم توفير حل مبدئي لـ VNS. سيتم البدء بجدول فارغ.")
+        current_solution = {level: [[[] for _ in slots] for _ in days] for level in all_levels}
+    else:
+        log_q.put('   - VNS: الانطلاق من الحل المبدئي المحسّن.')
+        current_solution = copy.deepcopy(initial_solution)
 
-    current_solution = initial_schedule
     initial_fitness, _ = calculate_fitness(current_solution, all_lectures, days, slots, teachers, rooms_data, all_levels, identifiers_by_level, special_constraints, teacher_constraints, distribution_rule_type, lectures_by_teacher_map, globally_unavailable_slots, saturday_teachers, teacher_pairs, day_to_idx, rules_grid, last_slot_restrictions, level_specific_large_rooms, specific_small_room_assignments, constraint_severities=constraint_severities, use_strict_hierarchy=use_strict_hierarchy, max_sessions_per_day=max_sessions_per_day, consecutive_large_hall_rule=consecutive_large_hall_rule, prefer_morning_slots=prefer_morning_slots, non_sharing_teacher_pairs=non_sharing_teacher_pairs)
     current_fitness, best_fitness_so_far = initial_fitness, initial_fitness
     best_solution_so_far = copy.deepcopy(current_solution)
@@ -4750,29 +4862,42 @@ def run_variable_neighborhood_search(
                 find_slot_for_single_lecture(lecture, shaken_solution, temp_teacher_schedule_shake, temp_room_schedule_shake, days, slots, rules_grid, rooms_data, teacher_constraints, globally_unavailable_slots, special_constraints, primary_slots, reserve_slots, identifiers_by_level, prioritize_primary, saturday_teachers, day_to_idx, level_specific_large_rooms, specific_small_room_assignments, consecutive_large_hall_rule, prefer_morning_slots)
 
             # --- التقييم ومعيار القبول الجديد ---
-            new_fitness, _ = calculate_fitness(shaken_solution, all_lectures, days, slots, teachers, rooms_data, all_levels, identifiers_by_level, special_constraints, teacher_constraints, distribution_rule_type, lectures_by_teacher_map, globally_unavailable_slots, saturday_teachers, teacher_pairs, day_to_idx, rules_grid, last_slot_restrictions, level_specific_large_rooms, specific_small_room_assignments, constraint_severities=constraint_severities, use_strict_hierarchy=use_strict_hierarchy, max_sessions_per_day=max_sessions_per_day, consecutive_large_hall_rule=consecutive_large_hall_rule, prefer_morning_slots=prefer_morning_slots, non_sharing_teacher_pairs=non_sharing_teacher_pairs)
-            
-            # ✨✨✨ بداية معيار القبول الصارم والجديد ✨✨✨
+            # --- ✨ بداية إضافة البحث المحلي ---
+            vns_ls_iterations = int(algorithm_settings.get('vns_local_search_iterations', 0))
+            solution_to_evaluate = shaken_solution
+
+            if vns_ls_iterations > 0:
+                improved_shaken_solution = run_error_driven_local_search(
+                    shaken_solution, all_lectures, days, slots, rooms_data, teachers, all_levels, 
+                    identifiers_by_level, special_constraints, teacher_constraints, distribution_rule_type, 
+                    lectures_by_teacher_map, globally_unavailable_slots, saturday_teachers, teacher_pairs, 
+                    day_to_idx, rules_grid, prioritize_primary, level_specific_large_rooms, 
+                    specific_small_room_assignments, constraint_severities, last_slot_restrictions, 
+                    max_iterations=vns_ls_iterations, consecutive_large_hall_rule=consecutive_large_hall_rule, 
+                    prefer_morning_slots=prefer_morning_slots, use_strict_hierarchy=use_strict_hierarchy,
+                    max_sessions_per_day=max_sessions_per_day, non_sharing_teacher_pairs=non_sharing_teacher_pairs
+                )
+                solution_to_evaluate = improved_shaken_solution
+            # --- ✨ نهاية إضافة البحث المحلي ---
+
+            new_fitness, _ = calculate_fitness(solution_to_evaluate, all_lectures, days, slots, teachers, rooms_data, all_levels, identifiers_by_level, special_constraints, teacher_constraints, distribution_rule_type, lectures_by_teacher_map, globally_unavailable_slots, saturday_teachers, teacher_pairs, day_to_idx, rules_grid, last_slot_restrictions, level_specific_large_rooms, specific_small_room_assignments, constraint_severities=constraint_severities, use_strict_hierarchy=use_strict_hierarchy, max_sessions_per_day=max_sessions_per_day, consecutive_large_hall_rule=consecutive_large_hall_rule, prefer_morning_slots=prefer_morning_slots, non_sharing_teacher_pairs=non_sharing_teacher_pairs)
+
             current_unplaced, current_hard, current_soft = -current_fitness[0], -current_fitness[1], -current_fitness[2]
             new_unplaced, new_hard, new_soft = -new_fitness[0], -new_fitness[1], -new_fitness[2]
             accept_move = False
-            # القاعدة 1: الأولوية القصوى لتقليل المواد الناقصة
             if new_unplaced < current_unplaced:
                 accept_move = True
-            # القاعدة 2: إذا لم يتغير النقص، الأولوية لتقليل الأخطاء الصارمة (مهما كانت تكلفة المرنة)
             elif new_unplaced == current_unplaced and new_hard < current_hard:
                 accept_move = True
-            # القاعدة 3: إذا لم تتغير الأخطاء الحرجة، نتحقق من تحسن الأخطاء المرنة
             elif new_unplaced == current_unplaced and new_hard == current_hard and new_soft < current_soft:
                 accept_move = True
-            # ✨✨✨ نهاية معيار القبول الصارم والجديد ✨✨✨
 
             if accept_move:
-                current_solution, current_fitness = shaken_solution, new_fitness
+                current_solution, current_fitness = solution_to_evaluate, new_fitness
                 unplaced, hard, soft = -current_fitness[0], -current_fitness[1], -current_fitness[2]
                 log_q.put(f'   * تحسين عند الجوار k={k}. اللياقة الجديدة (ن,ص,م) = ({unplaced}, {hard}, {soft})')
                 k = 1
-                
+
                 if new_fitness > best_fitness_so_far:
                     best_fitness_so_far, best_solution_so_far = new_fitness, copy.deepcopy(current_solution)
                     if progress_channel: progress_channel['best_solution_so_far'] = best_solution_so_far
@@ -4814,7 +4939,7 @@ def run_vns_with_flex_assignments(
     lectures_by_teacher_map, globally_unavailable_slots, saturday_teachers, teacher_pairs,
     day_to_idx, rules_grid, max_iterations, k_max, prioritize_primary,
     scheduling_state, last_slot_restrictions, level_specific_large_rooms,
-    specific_small_room_assignments, constraint_severities, flexible_categories, max_sessions_per_day=None,
+    specific_small_room_assignments, constraint_severities, flexible_categories, algorithm_settings, max_sessions_per_day=None,
     initial_schedule=None, initial_teacher_schedule=None, initial_room_schedule=None,
     consecutive_large_hall_rule="none", progress_channel=None, prefer_morning_slots=False, use_strict_hierarchy=False, non_sharing_teacher_pairs=[], mutation_hard_intensity=3, mutation_soft_probability=0.5
 ):
@@ -4904,12 +5029,102 @@ def run_vns_with_flex_assignments(
         k = 1
         while k <= k_max:
             if scheduling_state.get('should_stop'): raise StopByUserException()
+
             shaken_solution, swap_move_made = copy.deepcopy(current_solution), False
             lec1, lec2, t1_name, t2_name = None, None, None, None
 
+            # احتمالية 30% لتجربة حركة تبديل مرنة
             if flex_pools and random.random() <= 0.3:
-                # (الكود الخاص بالتبديل المرن يبقى كما هو)
-                pass 
+                
+                # =================== بداية الكود الهجين المقترح ===================
+                
+                # 50% فرصة للتبديل البسيط، 50% فرصة للتبديل مع إعادة البناء
+                if random.random() < 0.5:
+                    # --- الطريقة الأولى: التبديل البسيط والآمن (الكود الذي أضفته أنا) ---
+                    try:
+                        cat_id = random.choice(list(flex_pools.keys()))
+                        lectures_in_cat = flex_pools[cat_id].get("lectures", [])
+                        scheduled_flex_lecs_by_prof = defaultdict(list)
+                        for lec in lectures_in_cat:
+                            if lec.get('teacher_name'): scheduled_flex_lecs_by_prof[lec['teacher_name']].append(lec['id'])
+                        
+                        profs_in_cat_with_lecs = list(scheduled_flex_lecs_by_prof.keys())
+                        if len(profs_in_cat_with_lecs) >= 2:
+                            t1_name, t2_name = random.sample(profs_in_cat_with_lecs, 2)
+                            lec1_id = random.choice(scheduled_flex_lecs_by_prof[t1_name])
+                            lec2_id = random.choice(scheduled_flex_lecs_by_prof[t2_name])
+                            lec1 = next((l for l in all_lectures if l['id'] == lec1_id), None)
+                            lec2 = next((l for l in all_lectures if l['id'] == lec2_id), None)
+
+                            if lec1 and lec2:
+                                lec1['teacher_name'], lec2['teacher_name'] = t2_name, t1_name
+                                for grid in shaken_solution.values():
+                                    for day in grid:
+                                        for slot in day:
+                                            for lec in slot:
+                                                if lec['id'] == lec1_id: lec['teacher_name'] = t2_name
+                                                elif lec['id'] == lec2_id: lec['teacher_name'] = t1_name
+                                swap_move_made = True
+                                # log_q.put(f"   * تبديل بسيط: '{lec1['name']}' ({t1_name}) <-> '{lec2['name']}' ({t2_name})")
+                    except (IndexError, ValueError):
+                        pass
+                else:
+                    # --- الطريقة الثانية: التبديل وإعادة البناء (الكود الخاص بك مع تصحيح) ---
+                    try:
+                        cat_id = random.choice(list(flex_pools.keys()))
+                        pool = flex_pools[cat_id]
+                        if len(pool['lectures']) >= 2:
+                            lec1, lec2 = random.sample(pool['lectures'], 2)
+                            t1_name, t2_name = lec1.get('teacher_name'), lec2.get('teacher_name')
+
+                            if t1_name and t2_name and t1_name != t2_name:
+                                swap_move_made = True
+                                # log_q.put(f"   * تبديل وإعادة بناء: '{lec1['name']}' ({t1_name}) <-> '{lec2['name']}' ({t2_name})")
+                                
+                                ids_to_remove = {lec1.get('id'), lec2.get('id')}
+                                for grid in shaken_solution.values():
+                                    for day in grid:
+                                        for slot in day:
+                                            slot[:] = [l for l in slot if l.get('id') not in ids_to_remove]
+                                
+                                lec1['teacher_name'], lec2['teacher_name'] = t2_name, t1_name
+                                # --- بداية الإصلاح: إنشاء خريطة مؤقتة ومحدثة ---
+                                temp_map_for_sorting = copy.deepcopy(updated_lectures_by_teacher_map)
+
+                                # تحديث الخريطة المؤقتة لتعكس التبديل
+                                # إزالة المادتين من قوائم أساتذتهما القدامى
+                                if t1_name in temp_map_for_sorting:
+                                    temp_map_for_sorting[t1_name] = [l for l in temp_map_for_sorting[t1_name] if l.get('id') != lec1.get('id')]
+                                if t2_name in temp_map_for_sorting:
+                                    temp_map_for_sorting[t2_name] = [l for l in temp_map_for_sorting[t2_name] if l.get('id') != lec2.get('id')]
+
+                                # إضافة المادتين إلى قوائم أساتذتهما الجدد
+                                temp_map_for_sorting.setdefault(t2_name, []).append(lec1)
+                                temp_map_for_sorting.setdefault(t1_name, []).append(lec2)
+                                # --- نهاية الإصلاح ---
+                                
+                                temp_teacher_schedule_shake, temp_room_schedule_shake = defaultdict(set), defaultdict(set)
+                                for grid in shaken_solution.values():
+                                    for d_idx, day in enumerate(grid):
+                                        for s_idx, lectures_in_slot in enumerate(day):
+                                            for lec in lectures_in_slot:
+                                                if lec.get('teacher_name'): temp_teacher_schedule_shake[lec['teacher_name']].add((d_idx, s_idx))
+                                                if lec.get('room'): temp_room_schedule_shake[lec.get('room')].add((d_idx, s_idx))
+                                
+                                # ✨✨ --- هنا تم التصحيح --- ✨✨
+                                # تمرير القيود الحقيقية بدلاً من قواميس فارغة
+                                lectures_to_reinsert = sorted([lec1, lec2], key=lambda l: calculate_lecture_difficulty(
+                                    l, 
+                                    temp_map_for_sorting.get(l.get('teacher_name'), []),
+                                    special_constraints, # التصحيح
+                                    teacher_constraints  # التصحيح
+                                ), reverse=True)
+
+                                for lecture in lectures_to_reinsert:
+                                    find_slot_for_single_lecture(lecture, shaken_solution, temp_teacher_schedule_shake, temp_room_schedule_shake, days, slots, rules_grid, rooms_data, teacher_constraints, globally_unavailable_slots, special_constraints, primary_slots, reserve_slots, identifiers_by_level, prioritize_primary, saturday_teachers, day_to_idx, level_specific_large_rooms, specific_small_room_assignments, consecutive_large_hall_rule, prefer_morning_slots)
+                    except (IndexError, ValueError):
+                        pass
+ 
 
             if not swap_move_made:
                 # (منطق الهز الهجين يبقى كما هو)
@@ -4939,36 +5154,57 @@ def run_vns_with_flex_assignments(
                 for lecture in lectures_to_reinsert:
                     find_slot_for_single_lecture(lecture, shaken_solution, temp_teacher_schedule_shake, temp_room_schedule_shake, days, slots, rules_grid, rooms_data, teacher_constraints, globally_unavailable_slots, special_constraints, primary_slots, reserve_slots, identifiers_by_level, prioritize_primary, saturday_teachers, day_to_idx, level_specific_large_rooms, specific_small_room_assignments, consecutive_large_hall_rule, prefer_morning_slots)
 
-            new_fitness, _ = calculate_fitness(shaken_solution, all_lectures, days, slots, teachers, rooms_data, all_levels, identifiers_by_level, special_constraints, teacher_constraints, distribution_rule_type, updated_lectures_by_teacher_map, globally_unavailable_slots, saturday_teachers, teacher_pairs, day_to_idx, rules_grid, last_slot_restrictions, level_specific_large_rooms, specific_small_room_assignments, constraint_severities=constraint_severities, use_strict_hierarchy=use_strict_hierarchy, max_sessions_per_day=max_sessions_per_day, consecutive_large_hall_rule=consecutive_large_hall_rule, prefer_morning_slots=prefer_morning_slots, non_sharing_teacher_pairs=non_sharing_teacher_pairs)
-            
-            # ✨✨✨ بداية معيار القبول الصارم والجديد ✨✨✨
+            # --- ✨ بداية إضافة البحث المحلي ---
+            vns_ls_iterations = int(algorithm_settings.get('vns_local_search_iterations', 0))
+            solution_to_evaluate = shaken_solution
+
+            if vns_ls_iterations > 0:
+                improved_shaken_solution = run_error_driven_local_search(
+                    shaken_solution, all_lectures, days, slots, rooms_data, teachers, all_levels, 
+                    identifiers_by_level, special_constraints, teacher_constraints, distribution_rule_type, 
+                    updated_lectures_by_teacher_map, globally_unavailable_slots, saturday_teachers, teacher_pairs, 
+                    day_to_idx, rules_grid, prioritize_primary, level_specific_large_rooms, 
+                    specific_small_room_assignments, constraint_severities, last_slot_restrictions, 
+                    max_iterations=vns_ls_iterations, consecutive_large_hall_rule=consecutive_large_hall_rule, 
+                    prefer_morning_slots=prefer_morning_slots, use_strict_hierarchy=use_strict_hierarchy,
+                    max_sessions_per_day=max_sessions_per_day, non_sharing_teacher_pairs=non_sharing_teacher_pairs
+                )
+                solution_to_evaluate = improved_shaken_solution
+            # --- ✨ نهاية إضافة البحث المحلي ---
+
+            new_fitness, _ = calculate_fitness(solution_to_evaluate, all_lectures, days, slots, teachers, rooms_data, all_levels, identifiers_by_level, special_constraints, teacher_constraints, distribution_rule_type, updated_lectures_by_teacher_map, globally_unavailable_slots, saturday_teachers, teacher_pairs, day_to_idx, rules_grid, last_slot_restrictions, level_specific_large_rooms, specific_small_room_assignments, constraint_severities=constraint_severities, use_strict_hierarchy=use_strict_hierarchy, max_sessions_per_day=max_sessions_per_day, consecutive_large_hall_rule=consecutive_large_hall_rule, prefer_morning_slots=prefer_morning_slots, non_sharing_teacher_pairs=non_sharing_teacher_pairs)
+
             current_unplaced, current_hard, current_soft = -current_fitness[0], -current_fitness[1], -current_fitness[2]
             new_unplaced, new_hard, new_soft = -new_fitness[0], -new_fitness[1], -new_fitness[2]
+
             accept_move = False
             if new_unplaced < current_unplaced: accept_move = True
             elif new_unplaced == current_unplaced and new_hard < current_hard: accept_move = True
             elif new_unplaced == current_unplaced and new_hard == current_hard and new_soft < current_soft: accept_move = True
-            # ✨✨✨ نهاية معيار القبول الصارم والجديد ✨✨✨
 
             if accept_move:
-                current_solution, current_fitness = shaken_solution, new_fitness
+                current_solution, current_fitness = solution_to_evaluate, new_fitness
                 if swap_move_made:
                     updated_lectures_by_teacher_map.clear()
                     for lec in all_lectures:
                         if lec.get('teacher_name'): updated_lectures_by_teacher_map[lec.get('teacher_name')].append(lec)
+
                 unplaced, hard, soft = -current_fitness[0], -current_fitness[1], -current_fitness[2]
                 log_q.put(f'   * تحسين عند الجوار k={k}. اللياقة الجديدة (ن,ص,م) = ({unplaced}, {hard}, {soft})')
                 k = 1
+
                 if new_fitness > best_fitness_so_far:
                     best_fitness_so_far, best_solution_so_far = new_fitness, copy.deepcopy(current_solution)
                     if progress_channel: progress_channel['best_solution_so_far'] = best_solution_so_far
                     unplaced_best, hard_best, soft_best = -best_fitness_so_far[0], -best_fitness_so_far[1], -best_fitness_so_far[2]
                     log_q.put(f'   >>> إنجاز جديد! أفضل لياقة (ن,ص,م) = ({unplaced_best}, {hard_best}, {soft_best})')
+
                     _, errors_for_best = calculate_fitness(best_solution_so_far, all_lectures, days, slots, teachers, rooms_data, all_levels, identifiers_by_level, special_constraints, teacher_constraints, distribution_rule_type, updated_lectures_by_teacher_map, globally_unavailable_slots, saturday_teachers, teacher_pairs, day_to_idx, rules_grid, last_slot_restrictions, level_specific_large_rooms, specific_small_room_assignments, constraint_severities=constraint_severities, use_strict_hierarchy=use_strict_hierarchy, max_sessions_per_day=max_sessions_per_day, consecutive_large_hall_rule=consecutive_large_hall_rule, prefer_morning_slots=prefer_morning_slots, non_sharing_teacher_pairs=non_sharing_teacher_pairs)
                     progress_percentage = calculate_progress_percentage(errors_for_best)
                     log_q.put(f"PROGRESS:{progress_percentage:.1f}")
             else:
-                if swap_move_made: lec1['teacher_name'], lec2['teacher_name'] = t1_name, t2_name
+                if swap_move_made and lec1 and lec2:
+                    lec1['teacher_name'], lec2['teacher_name'] = t1_name, t2_name
                 k += 1
     
     # ✨ --- الجزء الثالث: تحديث عداد الركود --- ✨

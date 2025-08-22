@@ -414,6 +414,10 @@ function collectAllCurrentSettings() {
         tabu_iterations: document.getElementById('tabu-iterations-input').value,
         tabu_tenure: document.getElementById('tabu-tenure-input').value,
         tabu_neighborhood_size: document.getElementById('tabu-neighborhood-size-input').value,
+        tabu_stagnation_threshold: document.getElementById('tabu-stagnation-threshold').value,
+        tabu_stagnation_initial: document.getElementById('tabu-stagnation-initial').value,
+        tabu_stagnation_increment: document.getElementById('tabu-stagnation-increment').value,
+        tabu_stagnation_max: document.getElementById('tabu-stagnation-max').value,
         ga_population_size: document.getElementById('ga-population-input').value,
         ga_generations: document.getElementById('ga-generations-input').value,
         ga_mutation_rate: document.getElementById('ga-mutation-input').value,
@@ -422,6 +426,7 @@ function collectAllCurrentSettings() {
         lns_ruin_factor: document.getElementById('lns-ruin-factor-input').value,
         vns_iterations: document.getElementById('vns-iterations-input').value,
         vns_k_max: document.getElementById('vns-k-max-input').value,
+        vns_local_search_iterations: document.getElementById('vns-local-search-iterations').value,
         ma_population_size: document.getElementById('ma-population-input').value,
         ma_generations: document.getElementById('ma-generations-input').value,
         ma_mutation_rate: document.getElementById('ma-mutation-input').value,
@@ -1863,6 +1868,10 @@ function applySettingsToUI(settings) {
         document.getElementById('tabu-iterations-input').value = algoSettings.tabu_iterations || 1000;
         document.getElementById('tabu-tenure-input').value = algoSettings.tabu_tenure || 10;
         document.getElementById('tabu-neighborhood-size-input').value = algoSettings.tabu_neighborhood_size || 50;
+        document.getElementById('tabu-stagnation-threshold').value = algoSettings.tabu_stagnation_threshold || 15;
+        document.getElementById('tabu-stagnation-initial').value = algoSettings.tabu_stagnation_initial || 3;
+        document.getElementById('tabu-stagnation-increment').value = algoSettings.tabu_stagnation_increment || 2;
+        document.getElementById('tabu-stagnation-max').value = algoSettings.tabu_stagnation_max || 10;
         document.getElementById('ga-population-input').value = algoSettings.ga_population_size || 50;
         document.getElementById('ga-generations-input').value = algoSettings.ga_generations || 200;
         document.getElementById('ga-mutation-input').value = algoSettings.ga_mutation_rate || 5;
@@ -1871,6 +1880,7 @@ function applySettingsToUI(settings) {
         document.getElementById('lns-ruin-factor-input').value = algoSettings.lns_ruin_factor || 20;
         document.getElementById('vns-iterations-input').value = algoSettings.vns_iterations || 300;
         document.getElementById('vns-k-max-input').value = algoSettings.vns_k_max || 10;
+        document.getElementById('vns-local-search-iterations').value = algoSettings.vns_local_search_iterations || 3;
         document.getElementById('ma-population-input').value = algoSettings.ma_population_size || 40;
         document.getElementById('ma-generations-input').value = algoSettings.ma_generations || 100;
         document.getElementById('ma-mutation-input').value = algoSettings.ma_mutation_rate || 10;
@@ -2583,6 +2593,10 @@ function loadSettingsAndBuildUI() {
             document.getElementById('tabu-iterations-input').value = algo.tabu_iterations || 1000;
             document.getElementById('tabu-tenure-input').value = algo.tabu_tenure || 10;
             document.getElementById('tabu-neighborhood-size-input').value = algo.tabu_neighborhood_size || 50;
+            document.getElementById('tabu-stagnation-threshold').value = algo.tabu_stagnation_threshold || 15;
+            document.getElementById('tabu-stagnation-initial').value = algo.tabu_stagnation_initial || 3;
+            document.getElementById('tabu-stagnation-increment').value = algo.tabu_stagnation_increment || 2;
+            document.getElementById('tabu-stagnation-max').value = algo.tabu_stagnation_max || 10;
             document.getElementById('ga-population-input').value = algo.ga_population_size || 50;
             document.getElementById('ga-generations-input').value = algo.ga_generations || 200;
             document.getElementById('ga-mutation-input').value = algo.ga_mutation_rate || 5;
@@ -2591,6 +2605,7 @@ function loadSettingsAndBuildUI() {
             document.getElementById('lns-ruin-factor-input').value = algo.lns_ruin_factor || 20;
             document.getElementById('vns-iterations-input').value = algo.vns_iterations || 300;
             document.getElementById('vns-k-max-input').value = algo.vns_k_max || 10;
+            document.getElementById('vns-local-search-iterations').value = algo.vns_local_search_iterations || 3;
             document.getElementById('ma-population-input').value = algo.ma_population_size || 40;
             document.getElementById('ma-generations-input').value = algo.ma_generations || 100;
             document.getElementById('ma-mutation-input').value = algo.ma_mutation_rate || 10;
