@@ -885,6 +885,29 @@ def run_tabu_search(
             # رفع استثناء للتوقف إذا طلب المستخدم ذلك
             raise StopByUserException()
         
+        # ✨✨ --- بداية الإضافة الجديدة: التحقق من الطفرة اليدوية --- ✨✨
+        if SCHEDULING_STATE.get('force_mutation'):
+            log_q.put('   >>> 🚀 تم تفعيل طفرة يدوية من قبل المستخدم! <<<')
+            
+            # نفس منطق طفرة الركود بالضبط
+            current_solution = mutate(
+                best_solution, all_lectures, days, slots, rooms_data, teachers, levels, teacher_constraints, 
+                special_constraints, identifiers_by_level, rules_grid, lectures_by_teacher_map, globally_unavailable_slots, 
+                saturday_teachers, day_to_idx, level_specific_large_rooms, specific_small_room_assignments, constraint_severities, 
+                consecutive_large_hall_rule, prefer_morning_slots,
+                extra_teachers_on_hard_error=mutation_hard_intensity,
+                soft_error_shake_probability=mutation_soft_probability,
+                non_sharing_teacher_pairs=non_sharing_teacher_pairs
+            )
+            
+            current_fitness, _ = calculate_fitness(current_solution, all_lectures, days, slots, teachers, rooms_data, levels, identifiers_by_level, special_constraints, teacher_constraints, distribution_rule_type, lectures_by_teacher_map, globally_unavailable_slots, saturday_teachers, teacher_pairs, day_to_idx, rules_grid, last_slot_restrictions, level_specific_large_rooms, specific_small_room_assignments, constraint_severities=constraint_severities, use_strict_hierarchy=use_strict_hierarchy, max_sessions_per_day=max_sessions_per_day, consecutive_large_hall_rule=consecutive_large_hall_rule, prefer_morning_slots=prefer_morning_slots, non_sharing_teacher_pairs=non_sharing_teacher_pairs)
+            
+            # إعادة تعيين الإشارة والعدادات
+            SCHEDULING_STATE['force_mutation'] = False 
+            stagnation_counter = 0
+            tabu_list.clear()
+        # ✨✨ --- نهاية الإضافة الجديدة --- ✨✨
+        
         # ✨ --- بداية الجزء الجديد --- ✨
         if stagnation_counter >= STAGNATION_LIMIT:
             log_q.put(f'   >>> ⚠️ تم كشف الركود لـ {STAGNATION_LIMIT} دورة. تطبيق طفرة قوية...')
@@ -1216,6 +1239,31 @@ def run_genetic_algorithm(log_q, lectures_to_schedule, days, slots, rooms_data, 
     for gen in range(ga_generations):
         if scheduling_state.get('should_stop'):
             raise StopByUserException()
+        
+        # ✨✨ --- بداية الجزء الجديد الخاص بالخوارزمية الجينية --- ✨✨
+        if SCHEDULING_STATE.get('force_mutation'):
+            log_q.put('   >>> 🚀 تم تفعيل طفرة يدوية من قبل المستخدم! <<<')
+            
+            # في الخوارزمية الجينية، سنقوم بطفرة أفضل حل واستبدال أسوأ حل به
+            if best_solution_so_far and population:
+                mutated_solution = mutate(
+                    best_solution_so_far, lectures_to_schedule, days, slots, rooms_data, teachers, all_levels,
+                    teacher_constraints, special_constraints, identifiers_by_level, rules_grid, lectures_by_teacher_map,
+                    globally_unavailable_slots, saturday_teachers, day_to_idx,
+                    level_specific_large_rooms, specific_small_room_assignments, constraint_severities,
+                    consecutive_large_hall_rule, prefer_morning_slots,
+                    extra_teachers_on_hard_error=mutation_hard_intensity,
+                    soft_error_shake_probability=mutation_soft_probability,
+                    non_sharing_teacher_pairs=non_sharing_teacher_pairs
+                )
+                # استبدال أسوأ فرد في الجيل الحالي (الأخير في القائمة قبل الفرز) بالنسخة المطفرة
+                population[-1] = mutated_solution
+            
+            # إعادة تعيين الإشارة والعداد
+            SCHEDULING_STATE['force_mutation'] = False
+            stagnation_counter = 0
+        # ✨✨ --- نهاية الجزء الجديد --- ✨✨
+
         # --- ✨ بداية الإضافة: التحقق من الركود وتفعيل إعادة التشغيل --- ✨
         if stagnation_counter >= STAGNATION_LIMIT:
             log_q.put(f'   >>> ⚠️ تم كشف الركود لـ {STAGNATION_LIMIT} جيل. تفعيل إعادة التشغيل الجزئي...')
@@ -1963,6 +2011,32 @@ def run_memetic_algorithm(log_q, lectures_to_schedule, days, slots, rooms_data, 
     for gen in range(ma_generations):
         if scheduling_state.get('should_stop'):
             raise StopByUserException()
+        
+        # ✨✨ --- بداية الجزء الجديد الخاص بالخوارزمية الميميتيك --- ✨✨
+        if SCHEDULING_STATE.get('force_mutation'):
+            log_q.put('   >>> 🚀 تم تفعيل طفرة يدوية من قبل المستخدم! <<<')
+            
+            # في الخوارزمية الميميتيك، سنقوم بنفس منطق الجينية
+            # نطفر أفضل حل ونستبدل به أسوأ حل في الجيل الحالي
+            if best_solution_so_far and population:
+                mutated_solution = mutate(
+                    best_solution_so_far, lectures_to_schedule, days, slots, rooms_data, teachers, all_levels,
+                    teacher_constraints, special_constraints, identifiers_by_level, rules_grid, lectures_by_teacher_map,
+                    globally_unavailable_slots, saturday_teachers, day_to_idx,
+                    level_specific_large_rooms, specific_small_room_assignments, constraint_severities,
+                    consecutive_large_hall_rule, prefer_morning_slots,
+                    extra_teachers_on_hard_error=mutation_hard_intensity,
+                    soft_error_shake_probability=mutation_soft_probability,
+                    non_sharing_teacher_pairs=non_sharing_teacher_pairs
+                )
+                # استبدال أسوأ فرد في الجيل الحالي (الأخير في القائمة قبل الفرز) بالنسخة المطفرة
+                population[-1] = mutated_solution
+            
+            # إعادة تعيين الإشارة والعداد
+            SCHEDULING_STATE['force_mutation'] = False
+            stagnation_counter = 0
+        # ✨✨ --- نهاية الجزء الجديد --- ✨✨
+
 
         if stagnation_counter >= STAGNATION_LIMIT:
             log_q.put(f'   >>> ⚠️ تم كشف الركود لـ {STAGNATION_LIMIT} جيل. تفعيل إعادة التشغيل الجزئي...')
@@ -4591,6 +4665,7 @@ def run_large_neighborhood_search(log_q, all_lectures, days, slots, rooms_data, 
     
     # --- الخطوة 2: حلقة LNS الرئيسية ---
     for i in range(max_iterations):
+
         # ✨ --- الجزء الثاني: التحقق من الركود وتطبيق الطفرة القوية --- ✨
         if stagnation_counter >= STAGNATION_LIMIT:
             log_q.put(f'   >>> ⚠️ تم كشف الركود لـ {STAGNATION_LIMIT} دورة. تطبيق طفرة قوية...')
@@ -4603,6 +4678,30 @@ def run_large_neighborhood_search(log_q, all_lectures, days, slots, rooms_data, 
             current_fitness, _ = calculate_fitness(current_solution, all_lectures, days, slots, teachers, rooms_data, all_levels, identifiers_by_level, special_constraints, teacher_constraints, distribution_rule_type, lectures_by_teacher_map, globally_unavailable_slots, saturday_teachers, teacher_pairs, day_to_idx, rules_grid, last_slot_restrictions, level_specific_large_rooms, specific_small_room_assignments, 
                 constraint_severities=constraint_severities, use_strict_hierarchy=use_strict_hierarchy, max_sessions_per_day=max_sessions_per_day, consecutive_large_hall_rule=consecutive_large_hall_rule, prefer_morning_slots=prefer_morning_slots, non_sharing_teacher_pairs=non_sharing_teacher_pairs)
             stagnation_counter = 0 # إعادة تصفير العداد
+
+        # ✨✨ --- بداية الجزء الجديد الخاص بالبحث الجواري الواسع --- ✨✨
+        if SCHEDULING_STATE.get('force_mutation'):
+            log_q.put('   >>> 🚀 تم تفعيل طفرة يدوية من قبل المستخدم! <<<')
+            
+            # نفس منطق طفرة الركود بالضبط
+            current_solution = mutate(
+                best_solution_so_far, all_lectures, days, slots, rooms_data, teachers, all_levels, teacher_constraints, 
+                special_constraints, identifiers_by_level, rules_grid, lectures_by_teacher_map, globally_unavailable_slots, 
+                saturday_teachers, day_to_idx, level_specific_large_rooms, specific_small_room_assignments, constraint_severities, 
+                consecutive_large_hall_rule, prefer_morning_slots,
+                extra_teachers_on_hard_error=mutation_hard_intensity,
+                soft_error_shake_probability=mutation_soft_probability,
+                non_sharing_teacher_pairs=non_sharing_teacher_pairs
+            )
+            
+            current_fitness, _ = calculate_fitness(current_solution, all_lectures, days, slots, teachers, rooms_data, all_levels, identifiers_by_level, special_constraints, teacher_constraints, distribution_rule_type, lectures_by_teacher_map, globally_unavailable_slots, saturday_teachers, teacher_pairs, day_to_idx, rules_grid, last_slot_restrictions, level_specific_large_rooms, specific_small_room_assignments, constraint_severities=constraint_severities, use_strict_hierarchy=use_strict_hierarchy, max_sessions_per_day=max_sessions_per_day, consecutive_large_hall_rule=consecutive_large_hall_rule, prefer_morning_slots=prefer_morning_slots, non_sharing_teacher_pairs=non_sharing_teacher_pairs)
+            
+            # إعادة تعيين الإشارة والعدادات
+            SCHEDULING_STATE['force_mutation'] = False 
+            stagnation_counter = 0
+            # (لا يوجد tabu_list هنا لمسحها)
+        # ✨✨ --- نهاية الجزء الجديد --- ✨✨
+        
         if i % 10 == 0 and scheduling_state.get('should_stop'): 
                 log_q.put(f'\n--- تم إيقاف LNS عند التكرار {i+1} ---')
                 raise StopByUserException()
@@ -4796,6 +4895,29 @@ def run_variable_neighborhood_search(
                 constraint_severities=constraint_severities, use_strict_hierarchy=use_strict_hierarchy, max_sessions_per_day=max_sessions_per_day, consecutive_large_hall_rule=consecutive_large_hall_rule, prefer_morning_slots=prefer_morning_slots, non_sharing_teacher_pairs=non_sharing_teacher_pairs)
             stagnation_counter = 0 # إعادة تصفير العداد
         if scheduling_state.get('should_stop'): raise StopByUserException()
+        # ✨✨ --- بداية الجزء الجديد الخاص بالبحث الجواري المتغير --- ✨✨
+        if SCHEDULING_STATE.get('force_mutation'):
+            log_q.put('   >>> 🚀 تم تفعيل طفرة يدوية من قبل المستخدم! <<<')
+            
+            # نفس منطق طفرة الركود بالضبط
+            current_solution = mutate(
+                best_solution_so_far, all_lectures, days, slots, rooms_data, teachers, all_levels, teacher_constraints, 
+                special_constraints, identifiers_by_level, rules_grid, lectures_by_teacher_map, globally_unavailable_slots, 
+                saturday_teachers, day_to_idx, level_specific_large_rooms, specific_small_room_assignments, constraint_severities, 
+                consecutive_large_hall_rule, prefer_morning_slots,
+                extra_teachers_on_hard_error=mutation_hard_intensity,
+                soft_error_shake_probability=mutation_soft_probability,
+                non_sharing_teacher_pairs=non_sharing_teacher_pairs
+            )
+            
+            current_fitness, _ = calculate_fitness(current_solution, all_lectures, days, slots, teachers, rooms_data, all_levels, identifiers_by_level, special_constraints, teacher_constraints, distribution_rule_type, lectures_by_teacher_map, globally_unavailable_slots, saturday_teachers, teacher_pairs, day_to_idx, rules_grid, last_slot_restrictions, level_specific_large_rooms, specific_small_room_assignments, constraint_severities=constraint_severities, use_strict_hierarchy=use_strict_hierarchy, max_sessions_per_day=max_sessions_per_day, consecutive_large_hall_rule=consecutive_large_hall_rule, prefer_morning_slots=prefer_morning_slots, non_sharing_teacher_pairs=non_sharing_teacher_pairs)
+            
+            # إعادة تعيين الإشارة والعدادات
+            SCHEDULING_STATE['force_mutation'] = False 
+            stagnation_counter = 0
+            # (لا يوجد tabu_list هنا لمسحها)
+        # ✨✨ --- نهاية الجزء الجديد --- ✨✨
+
         if best_fitness_so_far == (0, 0, 0): break
         
         if (i % 10 == 0):
@@ -4997,6 +5119,31 @@ def run_vns_with_flex_assignments(
                 constraint_severities=constraint_severities, use_strict_hierarchy=use_strict_hierarchy, max_sessions_per_day=max_sessions_per_day, consecutive_large_hall_rule=consecutive_large_hall_rule, prefer_morning_slots=prefer_morning_slots, non_sharing_teacher_pairs=non_sharing_teacher_pairs)
             stagnation_counter = 0 # إعادة تصفير العداد
         if scheduling_state.get('should_stop'): raise StopByUserException()
+
+        # ✨✨ --- بداية الجزء الجديد الخاص بـ VNS المرن --- ✨✨
+        if SCHEDULING_STATE.get('force_mutation'):
+            log_q.put('   >>> 🚀 تم تفعيل طفرة يدوية من قبل المستخدم! <<<')
+            
+            # نفس منطق طفرة الركود بالضبط
+            current_solution = mutate(
+                best_solution_so_far, all_lectures, days, slots, rooms_data, teachers, all_levels, teacher_constraints, 
+                special_constraints, identifiers_by_level, rules_grid, lectures_by_teacher_map, globally_unavailable_slots, 
+                saturday_teachers, day_to_idx, level_specific_large_rooms, specific_small_room_assignments, constraint_severities, 
+                consecutive_large_hall_rule, prefer_morning_slots,
+                extra_teachers_on_hard_error=mutation_hard_intensity,
+                soft_error_shake_probability=mutation_soft_probability,
+                non_sharing_teacher_pairs=non_sharing_teacher_pairs
+            )
+            
+            # (ملاحظة: اسم المتغير هنا updated_lectures_by_teacher_map)
+            current_fitness, _ = calculate_fitness(current_solution, all_lectures, days, slots, teachers, rooms_data, all_levels, identifiers_by_level, special_constraints, teacher_constraints, distribution_rule_type, updated_lectures_by_teacher_map, globally_unavailable_slots, saturday_teachers, teacher_pairs, day_to_idx, rules_grid, last_slot_restrictions, level_specific_large_rooms, specific_small_room_assignments, constraint_severities=constraint_severities, use_strict_hierarchy=use_strict_hierarchy, max_sessions_per_day=max_sessions_per_day, consecutive_large_hall_rule=consecutive_large_hall_rule, prefer_morning_slots=prefer_morning_slots, non_sharing_teacher_pairs=non_sharing_teacher_pairs)
+            
+            # إعادة تعيين الإشارة والعدادات
+            SCHEDULING_STATE['force_mutation'] = False 
+            stagnation_counter = 0
+            # (لا يوجد tabu_list هنا لمسحها)
+        # ✨✨ --- نهاية الجزء الجديد --- ✨✨
+
         if best_fitness_so_far == (0, 0, 0): log_q.put("تم العثور على حل مثالي."); break
         if (i % 10 == 0):
             unplaced, hard, soft = -best_fitness_so_far[0], -best_fitness_so_far[1], -best_fitness_so_far[2]
@@ -5240,6 +5387,30 @@ def run_clonalg(log_q, lectures_to_schedule, days, slots, rooms_data, teachers, 
     for gen in range(generations):
         if scheduling_state.get('should_stop'):
             raise StopByUserException()
+        
+        # ✨✨ --- بداية الجزء الجديد الخاص بخوارزمية الاستنساخ --- ✨✨
+        if SCHEDULING_STATE.get('force_mutation'):
+            log_q.put('   >>> 🚀 تم تفعيل طفرة يدوية من قبل المستخدم! <<<')
+            
+            # نفس منطق الخوارزمية الجينية: نطفر أفضل حل ونستبدل به أسوأ حل
+            if best_solution_so_far and population:
+                mutated_solution = mutate(
+                    best_solution_so_far, lectures_to_schedule, days, slots, rooms_data, teachers, all_levels,
+                    teacher_constraints, special_constraints, identifiers_by_level, rules_grid, lectures_by_teacher_map,
+                    globally_unavailable_slots, saturday_teachers, day_to_idx,
+                    level_specific_large_rooms, specific_small_room_assignments, constraint_severities,
+                    consecutive_large_hall_rule, prefer_morning_slots,
+                    extra_teachers_on_hard_error=mutation_hard_intensity,
+                    soft_error_shake_probability=mutation_soft_probability,
+                    non_sharing_teacher_pairs=non_sharing_teacher_pairs
+                )
+                # استبدال أسوأ فرد في الجيل الحالي (الأخير في القائمة) بالنسخة المطفرة
+                population[-1] = mutated_solution
+            
+            # إعادة تعيين الإشارة والعداد
+            SCHEDULING_STATE['force_mutation'] = False
+            stagnation_counter = 0
+        # ✨✨ --- نهاية الجزء الجديد --- ✨✨
         
         # آلية كشف الركود وإعادة التشغيل الجزئي
         if stagnation_counter >= STAGNATION_LIMIT:
@@ -6182,6 +6353,18 @@ def delete_performance_reports_by_name():
     except Exception as e:
         traceback.print_exc()
         return jsonify({"error": f"فشل حذف التقارير: {str(e)}"}), 500
+
+# ✨✨ --- بداية الإضافة الجديدة --- ✨✨
+@app.route('/api/force-mutation', methods=['POST'])
+def force_mutation():
+    """
+    يقوم بتفعيل إشارة الطفرة اليدوية في الحالة المشتركة للخوارزمية.
+    """
+    if 'should_stop' in SCHEDULING_STATE and not SCHEDULING_STATE['should_stop']:
+        SCHEDULING_STATE['force_mutation'] = True
+        return jsonify({"success": True, "message": "تم إرسال إشارة الطفرة اليدوية."})
+    return jsonify({"success": False, "message": "لا توجد عملية جارية لتطبيق الطفرة عليها."})
+# ✨✨ --- نهاية الإضافة الجديدة --- ✨✨
 
 if __name__ == '__main__':
     # --- بداية التعديل ---

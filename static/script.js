@@ -482,6 +482,7 @@ function setupEventListeners() {
     const logOutput = document.getElementById('log-output');
     const generateBtn = document.getElementById('generate-schedule-button');
     const stopBtn = document.getElementById('stop-generation-button');
+    const forceMutationBtn = document.getElementById('force-mutation-button');
     let eventSource = null; // متغير للاحتفاظ باتصال SSE
 
     // --- مستمعات خاصة بالخوارزمية والمتابعة الحية ---
@@ -496,11 +497,13 @@ function setupEventListeners() {
             progressBar.style.backgroundColor = '#dc3545';
             progressBarContainer.style.display = 'none';
         }
+        document.getElementById('refine-schedule-btn').style.display = 'none';
         document.getElementById('timetables-output-area').innerHTML = ''; 
         logOutput.textContent = 'بدء الاتصال بالخادم وإرسال الإعدادات...\n';
         logOutput.style.display = 'block';
         generateBtn.style.display = 'none';
         stopBtn.style.display = 'inline-block';
+        forceMutationBtn.style.display = 'inline-block';
         stopBtn.disabled = false;
         stopBtn.textContent = '🛑 إيقاف البحث';
 
@@ -555,7 +558,7 @@ function setupEventListeners() {
                             displaySchedules(data.schedule, data.days, data.slots);
                             displayFailureReport(data.failures, data.unassigned_courses);
                             document.getElementById('refine-schedule-btn').style.display = 'inline-block';
-                            document.getElementById('save-result-btn').style.display = 'inline-block';
+                            // document.getElementById('save-result-btn').style.display = 'inline-block';
                         } finally {
                             resetGenerationUI();
                             let finalMessage = "اكتملت عملية الجدولة.\n\n" + (data.failures && data.failures.length > 0 ? `--- تقرير الفشل (${data.failures.length} حالة) ---\n` + data.failures.slice(0, 5).map(f => `• ${f.teacher_name || "N/A"}: ${f.reason || "N/A"}`).join('\n') : "تم إنشاء الجداول بنجاح.");
@@ -580,6 +583,7 @@ function setupEventListeners() {
                 eventSource.onerror = function() {
                     logOutput.textContent += '\n--- انقطع الاتصال بالخادم. ---\n';
                     resetGenerationUI();
+                    forceMutationBtn.style.display = 'none';
                     eventSource.close();
                 };
             } else {
@@ -598,9 +602,30 @@ function setupEventListeners() {
             fetch('/api/stop-generation', { method: 'POST' });
             this.disabled = true;
             this.textContent = '...جاري الإيقاف';
+            forceMutationBtn.style.display = 'none';
             
         }
     });
+
+    // ✨✨ --- بداية الإضافة الجديدة: مستمع النقر لزر الطفرة --- ✨✨
+    forceMutationBtn.addEventListener('click', function() {
+        fetch('/api/force-mutation', { method: 'POST' })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    console.log(data.message);
+                    // تغيير مؤقت لنص الزر لتأكيد الإرسال
+                    const originalText = this.textContent;
+                    this.textContent = '✅ تم الإرسال!';
+                    this.disabled = true;
+                    setTimeout(() => {
+                        this.textContent = originalText;
+                        this.disabled = false;
+                    }, 1500); // العودة للحالة الطبيعية بعد 1.5 ثانية
+                }
+            });
+    });
+    // ✨✨ --- نهاية الإضافة الجديدة --- ✨✨
 
     // --- بقية المستمعات الأخرى ---
     document.querySelectorAll('input[name="scheduling_method"]').forEach(radio => {
@@ -1171,10 +1196,14 @@ function addProfessorQuotaRow(container, selectedTeacher = '', quota = 1) {
 function resetGenerationUI() {
     const generateBtn = document.getElementById('generate-schedule-button');
     const stopBtn = document.getElementById('stop-generation-button');
+    const forceMutationBtn = document.getElementById('force-mutation-button');
     
     stopBtn.style.display = 'none';
     generateBtn.style.display = 'inline-block';
     document.getElementById('comprehensive-check-btn').style.display = 'inline-block';
+    if (forceMutationBtn) { // إضافة تحقق للتأكد من وجود الزر
+        forceMutationBtn.style.display = 'none';
+    }
 }
 
 function handleBulkExport(url, scheduleData, button, originalText) {
