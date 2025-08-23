@@ -806,7 +806,8 @@ def run_tabu_search(
     identifiers_by_level, special_constraints, teacher_constraints, distribution_rule_type, 
     lectures_by_teacher_map, globally_unavailable_slots, saturday_teachers, teacher_pairs, 
     day_to_idx, rules_grid, scheduling_state, last_slot_restrictions, 
-    level_specific_large_rooms, specific_small_room_assignments, constraint_severities, algorithm_settings=None,
+    level_specific_large_rooms, specific_small_room_assignments, constraint_severities, 
+    mutation_hard_intensity, mutation_soft_probability, tabu_stagnation_threshold,
     max_sessions_per_day=None, initial_solution=None, max_iterations=1000, 
     tabu_tenure=10, neighborhood_size=50, consecutive_large_hall_rule="none", 
     progress_channel=None, prefer_morning_slots=False, use_strict_hierarchy=False, non_sharing_teacher_pairs=[]
@@ -817,10 +818,6 @@ def run_tabu_search(
     ثم تنتقل إلى الأخطاء المرنة والاستكشاف العشوائي.
     """
     log_q.put("--- بدء البحث المحظور (النسخة الموجهة بالأخطاء) ---")
-
-    # ✨✨ --- إضافة سطر أمان --- ✨✨
-    if algorithm_settings is None:
-        algorithm_settings = {}
     
     # --- إعدادات أولية ---
     # تحديد الفترات الزمنية المتاحة بشكل عام ولكل أستاذ على حدة
@@ -875,23 +872,40 @@ def run_tabu_search(
     
     tabu_list = deque(maxlen=tabu_tenure)
 
-    # --- ✨ بداية تهيئة متغيرات الركود من الإعدادات ---
-    stagnation_threshold_percent = int(algorithm_settings.get('tabu_stagnation_threshold', 15))
-    initial_diversification_intensity = int(algorithm_settings.get('tabu_stagnation_initial', 3))
-    diversification_increment = int(algorithm_settings.get('tabu_stagnation_increment', 2))
-    MAX_DIVERSIFICATION_INTENSITY = int(algorithm_settings.get('tabu_stagnation_max', 10))
-
+    # ✨ --- بداية الجزء الجديد --- ✨
     stagnation_counter = 0
     last_best_fitness = best_fitness
-    STAGNATION_LIMIT = max(30, int(max_iterations * (stagnation_threshold_percent / 100.0)))
-    current_diversification_intensity = initial_diversification_intensity
-    # --- ✨ نهاية التهيئة ---
+    stagnation_percentage = float(tabu_stagnation_threshold) / 100.0
+    STAGNATION_LIMIT = max(50, int(max_iterations * stagnation_percentage))
+    # ✨ --- نهاية الجزء الجديد --- ✨
     
     # --- حلقة البحث الرئيسية ---
     for i in range(max_iterations):
         if scheduling_state.get('should_stop'):
             # رفع استثناء للتوقف إذا طلب المستخدم ذلك
             raise StopByUserException()
+        
+        # ✨ --- بداية الجزء الجديد --- ✨
+        if stagnation_counter >= STAGNATION_LIMIT:
+            log_q.put(f'   >>> ⚠️ تم كشف الركود لـ {STAGNATION_LIMIT} دورة. تطبيق طفرة قوية...')
+            
+            # استدعاء دالة الطفرة على أفضل حل تم العثور عليه
+            current_solution = mutate(
+                best_solution, all_lectures, days, slots, rooms_data, teachers, levels, teacher_constraints, 
+                special_constraints, identifiers_by_level, rules_grid, lectures_by_teacher_map, globally_unavailable_slots, 
+                saturday_teachers, day_to_idx, level_specific_large_rooms, specific_small_room_assignments, constraint_severities, 
+                consecutive_large_hall_rule, prefer_morning_slots,
+                extra_teachers_on_hard_error=mutation_hard_intensity,
+                soft_error_shake_probability=mutation_soft_probability,
+                non_sharing_teacher_pairs=non_sharing_teacher_pairs
+            )
+            
+            # إعادة تقييم الحل الجديد وتصفير العدادات
+            current_fitness, _ = calculate_fitness(current_solution, all_lectures, days, slots, teachers, rooms_data, levels, identifiers_by_level, special_constraints, teacher_constraints, distribution_rule_type, lectures_by_teacher_map, globally_unavailable_slots, saturday_teachers, teacher_pairs, day_to_idx, rules_grid, last_slot_restrictions, level_specific_large_rooms, specific_small_room_assignments, constraint_severities=constraint_severities, use_strict_hierarchy=use_strict_hierarchy, max_sessions_per_day=max_sessions_per_day, consecutive_large_hall_rule=consecutive_large_hall_rule, prefer_morning_slots=prefer_morning_slots, non_sharing_teacher_pairs=non_sharing_teacher_pairs)
+            stagnation_counter = 0
+            tabu_list.clear() # مسح قائمة الحظر بعد الهزة الكبيرة
+        # ✨ --- نهاية الجزء الجديد --- ✨
+        
         if (i + 1) % 50 == 0 and i > 0:
             unplaced, hard, soft = -best_fitness[0], -best_fitness[1], -best_fitness[2]
             log_q.put(f"--- (متابعة) دورة {i+1}: أفضل لياقة حالية (ن,ص,م)=({unplaced}, {hard}, {soft}) ---")
@@ -1066,46 +1080,13 @@ def run_tabu_search(
             progress_percentage = calculate_progress_percentage(errors_for_best)
             log_q.put(f"PROGRESS:{progress_percentage:.1f}")
 
-        # --- ✨ بداية المنطق المحدث لمعالجة الركود التصاعدي ---
-        if best_fitness > last_best_fitness:
-            stagnation_counter = 0
-            current_diversification_intensity = initial_diversification_intensity
-        else:
+        # ✨ --- بداية الجزء الجديد --- ✨
+        if best_fitness == last_best_fitness:
             stagnation_counter += 1
-
+        else:
+            stagnation_counter = 0 # إعادة تصفير العداد عند حدوث تحسن
         last_best_fitness = best_fitness
-
-        if stagnation_counter >= STAGNATION_LIMIT:
-            log_q.put(f"   >>> ⚠️ تم كشف الركود لـ {STAGNATION_LIMIT} دورة. تطبيق طفرة بقوة {current_diversification_intensity} أساتذة...")
-
-            current_solution = mutate(
-                best_solution, all_lectures, days, slots, rooms_data, teachers, levels,
-                teacher_constraints, special_constraints, identifiers_by_level, rules_grid, lectures_by_teacher_map,
-                globally_unavailable_slots, saturday_teachers, day_to_idx, 
-                level_specific_large_rooms, specific_small_room_assignments, constraint_severities, consecutive_large_hall_rule, 
-                prefer_morning_slots,
-                extra_teachers_on_hard_error=current_diversification_intensity,
-                soft_error_shake_probability=0.5,
-                non_sharing_teacher_pairs=non_sharing_teacher_pairs
-            )
-
-            current_fitness, _ = calculate_fitness(
-                current_solution, all_lectures, days, slots, teachers, rooms_data, levels, 
-                identifiers_by_level, special_constraints, teacher_constraints, distribution_rule_type, 
-                lectures_by_teacher_map, globally_unavailable_slots, saturday_teachers, teacher_pairs, 
-                day_to_idx, rules_grid, last_slot_restrictions, level_specific_large_rooms, 
-                specific_small_room_assignments, constraint_severities=constraint_severities, use_strict_hierarchy=use_strict_hierarchy, 
-                max_sessions_per_day=max_sessions_per_day, consecutive_large_hall_rule=consecutive_large_hall_rule, 
-                prefer_morning_slots=prefer_morning_slots, non_sharing_teacher_pairs=non_sharing_teacher_pairs
-            )
-
-            tabu_list.clear()
-
-            # ✨ استخدام مقدار الزيادة من الإعدادات
-            current_diversification_intensity = min(MAX_DIVERSIFICATION_INTENSITY, current_diversification_intensity + diversification_increment)
-
-            stagnation_counter = 0
-        # --- ✨ نهاية المنطق المحدث ---
+        # ✨ --- نهاية الجزء الجديد --- ✨
 
     # --- الجزء الختامي ---
     log_q.put('انتهى البحث المحظور.')
@@ -1639,8 +1620,7 @@ def run_hyper_heuristic(
             if 'all_levels' in base_params: base_params['levels'] = base_params.pop('all_levels')
             specific_params = {
                 "tabu_tenure": int(algorithm_settings.get('tabu_tenure', 10)), "neighborhood_size": int(algorithm_settings.get('tabu_neighborhood_size', 50)),
-                "initial_solution": copy.deepcopy(current_solution),
-                "algorithm_settings": algorithm_settings
+                "initial_solution": copy.deepcopy(current_solution)
             }
         elif action == "Memetic_Algorithm":
             if 'all_lectures' in base_params: base_params['lectures_to_schedule'] = base_params.pop('all_lectures')
@@ -2456,6 +2436,7 @@ def generate_schedule():
             mutation_soft_probability = float(algorithm_settings.get('mutation_soft_error_probability', 0.5))
             max_sessions_per_day_str = algorithm_settings.get('max_sessions_per_day', 'none')
             max_sessions_per_day = int(max_sessions_per_day_str) if max_sessions_per_day_str.isdigit() else None
+            tabu_stagnation_threshold = int(algorithm_settings.get('tabu_stagnation_threshold', 15))
             
             if intensive_attempts > 1:
                 log_q.put(f"--- بدء البحث المكثف لـ {intensive_attempts} محاولات ---")
@@ -2764,7 +2745,9 @@ def generate_schedule():
                             last_slot_restrictions,
                             level_specific_large_rooms,
                             specific_small_room_assignments, constraint_severities,
-                            algorithm_settings=algorithm_settings,
+                            mutation_hard_intensity=mutation_hard_intensity,
+                            mutation_soft_probability=mutation_soft_probability,
+                            tabu_stagnation_threshold=tabu_stagnation_threshold,
                             initial_solution=greedy_initial_schedule,
                             max_iterations=max_iterations,
                             tabu_tenure=tabu_tenure,

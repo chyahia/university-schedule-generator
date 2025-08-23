@@ -414,10 +414,7 @@ function collectAllCurrentSettings() {
         tabu_iterations: document.getElementById('tabu-iterations-input').value,
         tabu_tenure: document.getElementById('tabu-tenure-input').value,
         tabu_neighborhood_size: document.getElementById('tabu-neighborhood-size-input').value,
-        tabu_stagnation_threshold: document.getElementById('tabu-stagnation-threshold').value,
-        tabu_stagnation_initial: document.getElementById('tabu-stagnation-initial').value,
-        tabu_stagnation_increment: document.getElementById('tabu-stagnation-increment').value,
-        tabu_stagnation_max: document.getElementById('tabu-stagnation-max').value,
+        tabu_stagnation_threshold: document.getElementById('tabu-stagnation-threshold-input').value,
         ga_population_size: document.getElementById('ga-population-input').value,
         ga_generations: document.getElementById('ga-generations-input').value,
         ga_mutation_rate: document.getElementById('ga-mutation-input').value,
@@ -433,11 +430,11 @@ function collectAllCurrentSettings() {
         ma_elitism_count: document.getElementById('ma-elitism-input').value,
         ma_local_search_iterations: document.getElementById('ma-local-search-iterations').value,
         clonalg_population_size: document.getElementById('clonalg-population-input').value,
-        mutation_hard_error_intensity: document.getElementById('mutation-hard-error-intensity').value,
-        mutation_soft_error_probability: (parseFloat(document.getElementById('mutation-soft-error-probability').value) / 100.0).toString(),
         clonalg_generations: document.getElementById('clonalg-generations-input').value,
         clonalg_selection_size: document.getElementById('clonalg-selection-input').value,
         clonalg_clone_factor: document.getElementById('clonalg-clone-factor-input').value,
+        mutation_hard_error_intensity: document.getElementById('mutation-hard-error-intensity').value,
+        mutation_soft_error_probability: (parseFloat(document.getElementById('mutation-soft-error-probability').value) / 100.0).toString(),
         hh_iterations: document.getElementById('hh-iterations-input').value,
         hh_selected_llh: Array.from(document.querySelectorAll('input[name="hh_llh_select"]:checked')).map(cb => cb.value),
         hh_tabu_tenure: document.getElementById('hh-tabu-tenure-input').value,
@@ -1868,10 +1865,7 @@ function applySettingsToUI(settings) {
         document.getElementById('tabu-iterations-input').value = algoSettings.tabu_iterations || 1000;
         document.getElementById('tabu-tenure-input').value = algoSettings.tabu_tenure || 10;
         document.getElementById('tabu-neighborhood-size-input').value = algoSettings.tabu_neighborhood_size || 50;
-        document.getElementById('tabu-stagnation-threshold').value = algoSettings.tabu_stagnation_threshold || 15;
-        document.getElementById('tabu-stagnation-initial').value = algoSettings.tabu_stagnation_initial || 3;
-        document.getElementById('tabu-stagnation-increment').value = algoSettings.tabu_stagnation_increment || 2;
-        document.getElementById('tabu-stagnation-max').value = algoSettings.tabu_stagnation_max || 10;
+        document.getElementById('tabu-stagnation-threshold-input').value = algoSettings.tabu_stagnation_threshold || 15;
         document.getElementById('ga-population-input').value = algoSettings.ga_population_size || 50;
         document.getElementById('ga-generations-input').value = algoSettings.ga_generations || 200;
         document.getElementById('ga-mutation-input').value = algoSettings.ga_mutation_rate || 5;
@@ -2593,10 +2587,7 @@ function loadSettingsAndBuildUI() {
             document.getElementById('tabu-iterations-input').value = algo.tabu_iterations || 1000;
             document.getElementById('tabu-tenure-input').value = algo.tabu_tenure || 10;
             document.getElementById('tabu-neighborhood-size-input').value = algo.tabu_neighborhood_size || 50;
-            document.getElementById('tabu-stagnation-threshold').value = algo.tabu_stagnation_threshold || 15;
-            document.getElementById('tabu-stagnation-initial').value = algo.tabu_stagnation_initial || 3;
-            document.getElementById('tabu-stagnation-increment').value = algo.tabu_stagnation_increment || 2;
-            document.getElementById('tabu-stagnation-max').value = algo.tabu_stagnation_max || 10;
+            document.getElementById('tabu-stagnation-threshold-input').value = algo.tabu_stagnation_threshold || 15;
             document.getElementById('ga-population-input').value = algo.ga_population_size || 50;
             document.getElementById('ga-generations-input').value = algo.ga_generations || 200;
             document.getElementById('ga-mutation-input').value = algo.ga_mutation_rate || 5;

@@ -551,25 +551,8 @@
                         <input type="number" id="tabu-tenure-input" value="10" min="1" style="width: 80px; padding: 5px;">
                         <label for="tabu-neighborhood-size-input" style="margin-right: 15px;">حجم الجوار: </label>
                         <input type="number" id="tabu-neighborhood-size-input" value="50" min="10" style="width: 80px; padding: 5px;">
-                    
-
-                        <div style="margin-top: 15px; border: 1px dashed #6c757d; padding: 15px; border-radius: 6px;">
-                            <h5 style="margin-top: 0; text-align: center; font-weight: bold;">إعدادات دفع الركود المتقدمة:</h5>
-
-                            <label for="tabu-stagnation-threshold">عتبة الركود (%):</label>
-                            <input type="number" id="tabu-stagnation-threshold" value="15" min="5" max="50" style="width: 80px; padding: 5px;" title="النسبة المئوية من إجمالي الدورات التي إذا مرت دون تحسن، يتم تفعيل دفع الركود.">
-
-                            <label for="tabu-stagnation-initial" style="margin-right: 15px;">الشدة الأولية:</label>
-                            <input type="number" id="tabu-stagnation-initial" value="3" min="1" style="width: 80px; padding: 5px;" title="عدد الأساتذة الذين سيتم إعادة جدولتها عند أول ركود.">
-
-                            <br><br>
-
-                            <label for="tabu-stagnation-increment">مقدار الزيادة:</label>
-                            <input type="number" id="tabu-stagnation-increment" value="2" min="1" style="width: 80px; padding: 5px;" title="مقدار زيادة الشدة في كل مرة يستمر فيها الركود.">
-
-                            <label for="tabu-stagnation-max" style="margin-right: 15px;">الشدة القصوى:</label>
-                            <input type="number" id="tabu-stagnation-max" value="10" min="2" style="width: 80px; padding: 5px;" title="أقصى عدد أساتذة يمكن إعادة جدولتها مهما استمر الركود.">
-                        </div>
+                        <label for="tabu-stagnation-threshold-input" style="margin-right: 15px;">عتبة الركود (%): </label>
+                        <input type="number" id="tabu-stagnation-threshold-input" value="15" min="5" max="50" step="5" style="width: 80px; padding: 5px;" title="نسبة مئوية من إجمالي التكرارات. بعد هذا العدد من الدورات بدون تحسن، سيتم تفعيل الطفرة القوية.">
                     </div>
                     
                     <br>
