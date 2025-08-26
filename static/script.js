@@ -17,6 +17,8 @@ let availableLargeRooms = [];
 let allAvailableTeachers = [];
 let allAvailableCourses = [];
 let isManualEditModeActive = false;
+let mutationLevel = 1; // يبدأ من المستوى الأول
+let lastBestFitnessScore = [Infinity, Infinity, Infinity]; // لتتبع آخر لياقة
 
 // =================================================================================
 // --- Initial Setup on Page Load ---
@@ -424,6 +426,8 @@ function collectAllCurrentSettings() {
         vns_iterations: document.getElementById('vns-iterations-input').value,
         vns_k_max: document.getElementById('vns-k-max-input').value,
         vns_local_search_iterations: document.getElementById('vns-local-search-iterations').value,
+        lns_stagnation_threshold: document.getElementById('lns-stagnation-threshold-input').value,
+        vns_stagnation_threshold: document.getElementById('vns-stagnation-threshold-input').value,
         ma_population_size: document.getElementById('ma-population-input').value,
         ma_generations: document.getElementById('ma-generations-input').value,
         ma_mutation_rate: document.getElementById('ma-mutation-input').value,
@@ -435,6 +439,10 @@ function collectAllCurrentSettings() {
         clonalg_clone_factor: document.getElementById('clonalg-clone-factor-input').value,
         mutation_hard_error_intensity: document.getElementById('mutation-hard-error-intensity').value,
         mutation_soft_error_probability: (parseFloat(document.getElementById('mutation-soft-error-probability').value) / 100.0).toString(),
+        ga_stagnation_threshold: document.getElementById('ga-stagnation-threshold').value,
+        mutation_initial_intensity: document.getElementById('mutation-initial-intensity').value,
+        mutation_increment: document.getElementById('mutation-increment').value,
+        mutation_max_intensity: document.getElementById('mutation-max-intensity').value,
         hh_iterations: document.getElementById('hh-iterations-input').value,
         hh_selected_llh: Array.from(document.querySelectorAll('input[name="hh_llh_select"]:checked')).map(cb => cb.value),
         hh_tabu_tenure: document.getElementById('hh-tabu-tenure-input').value,
@@ -487,6 +495,8 @@ function setupEventListeners() {
 
     // --- مستمعات خاصة بالخوارزمية والمتابعة الحية ---
     generateBtn.addEventListener('click', function() {
+        mutationLevel = 1;
+        lastBestFitnessScore = [Infinity, Infinity, Infinity];
         // 1. تجهيز الواجهة
         const progressBarContainer = document.getElementById('progress-container');
         const progressBar = document.getElementById('progress-bar');
@@ -578,6 +588,29 @@ function setupEventListeners() {
                         logOutput.textContent += message + '\n';
                         logOutput.scrollTop = logOutput.scrollHeight;
                     }
+                    // --- بداية: منطق تتبع التحسن وإعادة ضبط مستوى الطفرة ---
+                    if (message.includes("إنجاز جديد!")) {
+                        // استخراج قيم اللياقة الجديدة من الرسالة
+                        const match = message.match(/\((-?\d+), (-?\d+), (-?\d+)\)/);
+                        if (match) {
+                            const newFitness = [parseInt(match[1]), parseInt(match[2]), parseInt(match[3])];
+
+                            // المقارنة الهرمية
+                            const isBetter = (newFitness[0] < lastBestFitnessScore[0]) ||
+                                            (newFitness[0] === lastBestFitnessScore[0] && newFitness[1] < lastBestFitnessScore[1]) ||
+                                            (newFitness[0] === lastBestFitnessScore[0] && newFitness[1] === lastBestFitnessScore[1] && newFitness[2] < lastBestFitnessScore[2]);
+
+                            if (isBetter) {
+                                // إذا حدث تحسن، أعد كل شيء إلى المستوى الأول
+                                mutationLevel = 1;
+                                lastBestFitnessScore = newFitness;
+                                const initialIntensity = parseInt(document.getElementById('mutation-initial-intensity').value, 10);
+                                forceMutationBtn.textContent = `🚀 تطبيق طفرة (القوة: ${initialIntensity})`;
+                                console.log("Improvement detected! Mutation level reset to 1.");
+                            }
+                        }
+                    }
+                    // --- نهاية: منطق تتبع التحسن ---
                 };
 
                 eventSource.onerror = function() {
@@ -609,21 +642,41 @@ function setupEventListeners() {
 
     // ✨✨ --- بداية الإضافة الجديدة: مستمع النقر لزر الطفرة --- ✨✨
     forceMutationBtn.addEventListener('click', function() {
-        fetch('/api/force-mutation', { method: 'POST' })
-            .then(res => res.json())
-            .then(data => {
-                if (data.success) {
-                    console.log(data.message);
-                    // تغيير مؤقت لنص الزر لتأكيد الإرسال
-                    const originalText = this.textContent;
-                    this.textContent = '✅ تم الإرسال!';
-                    this.disabled = true;
-                    setTimeout(() => {
-                        this.textContent = originalText;
-                        this.disabled = false;
-                    }, 1500); // العودة للحالة الطبيعية بعد 1.5 ثانية
-                }
-            });
+        // --- بداية المنطق الجديد: قراءة الإعدادات من الواجهة ---
+        const initialIntensity = parseInt(document.getElementById('mutation-initial-intensity').value, 10);
+        const increment = parseInt(document.getElementById('mutation-increment').value, 10);
+        const maxIntensity = parseInt(document.getElementById('mutation-max-intensity').value, 10);
+
+        // حساب الشدة الحالية بناءً على مستوى الطفرة
+        let currentIntensity = initialIntensity + (increment * (mutationLevel - 1));
+        // التأكد من أن الشدة لا تتجاوز الحد الأقصى
+        currentIntensity = Math.min(currentIntensity, maxIntensity);
+        // --- نهاية المنطق الجديد ---
+
+        // إرسال الشدة المحسوبة إلى الخادم
+        fetch('/api/force-mutation', { 
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ intensity: currentIntensity })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                mutationLevel++; 
+
+                this.textContent = '✅ تم الإرسال!';
+                this.disabled = true;
+
+                setTimeout(() => {
+                    // حساب الشدة التالية لعرضها على الزر
+                    let nextIntensity = initialIntensity + (increment * (mutationLevel - 1));
+                    nextIntensity = Math.min(nextIntensity, maxIntensity);
+
+                    this.textContent = `🚀 تطبيق طفرة (القوة: ${nextIntensity})`;
+                    this.disabled = false;
+                }, 1500);
+            }
+        });
     });
     // ✨✨ --- نهاية الإضافة الجديدة --- ✨✨
 
@@ -1904,6 +1957,8 @@ function applySettingsToUI(settings) {
         document.getElementById('vns-iterations-input').value = algoSettings.vns_iterations || 300;
         document.getElementById('vns-k-max-input').value = algoSettings.vns_k_max || 10;
         document.getElementById('vns-local-search-iterations').value = algoSettings.vns_local_search_iterations || 3;
+        document.getElementById('lns-stagnation-threshold-input').value = algoSettings.lns_stagnation_threshold || 25;
+        document.getElementById('vns-stagnation-threshold-input').value = algoSettings.vns_stagnation_threshold || 20;
         document.getElementById('ma-population-input').value = algoSettings.ma_population_size || 40;
         document.getElementById('ma-generations-input').value = algoSettings.ma_generations || 100;
         document.getElementById('ma-mutation-input').value = algoSettings.ma_mutation_rate || 10;
@@ -1913,6 +1968,12 @@ function applySettingsToUI(settings) {
         document.getElementById('clonalg-generations-input').value = algoSettings.clonalg_generations || 100;
         document.getElementById('clonalg-selection-input').value = algoSettings.clonalg_selection_size || 10;
         document.getElementById('clonalg-clone-factor-input').value = algoSettings.clonalg_clone_factor || 1.0;
+        document.getElementById('mutation-hard-error-intensity').value = algoSettings.mutation_hard_error_intensity || 3;
+        document.getElementById('mutation-soft-error-probability').value = (parseFloat(algoSettings.mutation_soft_error_probability || 0.5) * 100.0);
+        document.getElementById('ga-stagnation-threshold').value = algoSettings.ga_stagnation_threshold || 15;
+        document.getElementById('mutation-initial-intensity').value = algoSettings.mutation_initial_intensity || 4;
+        document.getElementById('mutation-increment').value = algoSettings.mutation_increment || 3;
+        document.getElementById('mutation-max-intensity').value = algoSettings.mutation_max_intensity || 13;
 
         // --- استعادة إعدادات النظام الخبير ---
         document.getElementById('hh-iterations-input').value = algoSettings.hh_iterations || 50;
@@ -2626,6 +2687,8 @@ function loadSettingsAndBuildUI() {
             document.getElementById('vns-iterations-input').value = algo.vns_iterations || 300;
             document.getElementById('vns-k-max-input').value = algo.vns_k_max || 10;
             document.getElementById('vns-local-search-iterations').value = algo.vns_local_search_iterations || 3;
+            document.getElementById('lns-stagnation-threshold-input').value = algo.lns_stagnation_threshold || 25;
+            document.getElementById('vns-stagnation-threshold-input').value = algo.vns_stagnation_threshold || 20;
             document.getElementById('ma-population-input').value = algo.ma_population_size || 40;
             document.getElementById('ma-generations-input').value = algo.ma_generations || 100;
             document.getElementById('ma-mutation-input').value = algo.ma_mutation_rate || 10;
@@ -2637,6 +2700,10 @@ function loadSettingsAndBuildUI() {
             document.getElementById('clonalg-clone-factor-input').value = algo.clonalg_clone_factor || 1.0;
             document.getElementById('mutation-hard-error-intensity').value = algo.mutation_hard_error_intensity || 3;
             document.getElementById('mutation-soft-error-probability').value = (parseFloat(algo.mutation_soft_error_probability || 0.5) * 100.0);
+            document.getElementById('ga-stagnation-threshold').value = algo.ga_stagnation_threshold || 15;
+            document.getElementById('mutation-initial-intensity').value = algo.mutation_initial_intensity || 4;
+            document.getElementById('mutation-increment').value = algo.mutation_increment || 3;
+            document.getElementById('mutation-max-intensity').value = algo.mutation_max_intensity || 13;
             document.getElementById('hh-iterations-input').value = algo.hh_iterations || 50;
             if (algo.hh_budget_mode) {
                 const budgetRadio = document.querySelector(`input[name="hh_budget_mode"][value="${algo.hh_budget_mode}"]`);

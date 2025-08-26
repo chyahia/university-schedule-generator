@@ -628,6 +628,27 @@
                             <label for="mutation-soft-error-probability">احتمالية الهزة الإضافية عند وجود خطأ بسيط (%):</label>
                             <input type="number" id="mutation-soft-error-probability" value="50" min="0" max="100" step="5" style="width: 80px; padding: 5px;" title="احتمالية إعادة جدولة أستاذ عشوائي إضافي عند وجود خطأ بسيط. 50% تعني فرصة 1 من 2.">
                         </div>
+                        <div style="margin-top: 10px;">
+                            <label for="ga-stagnation-threshold">عتبة الركود (%):</label>
+                            <input type="number" id="ga-stagnation-threshold" value="15" min="5" max="50" step="5" style="width: 80px; padding: 5px;" title="نسبة مئوية من إجمالي الأجيال. بعد هذا العدد من الدورات بدون تحسن، سيتم تفعيل إعادة التشغيل الجزئي.">
+                        </div>
+                        <div style="margin-top: 15px; border-top: 1px dashed #ccc; padding-top: 15px;">
+                            <strong style="display: block; margin-bottom: 10px;">إعدادات زر تطبيق الطفرة اليدوية:</strong>
+                            <div style="display: flex; gap: 15px; align-items: center; justify-content: center;">
+                                <div>
+                                    <label for="mutation-initial-intensity">الشدة الأولية:</label>
+                                    <input type="number" id="mutation-initial-intensity" value="4" min="1" step="1" style="width: 80px; padding: 5px;" title="عدد الأساتذة في أول نقرة على زر الطفرة.">
+                                </div>
+                                <div>
+                                    <label for="mutation-increment">مقدار الزيادة:</label>
+                                    <input type="number" id="mutation-increment" value="3" min="1" step="1" style="width: 80px; padding: 5px;" title="العدد الذي سيتم إضافته لقوة الطفرة في كل نقرة تالية لا تحقق تحسنًا.">
+                                </div>
+                                <div>
+                                    <label for="mutation-max-intensity">الشدة القصوى:</label>
+                                    <input type="number" id="mutation-max-intensity" value="13" min="1" step="1" style="width: 80px; padding: 5px;" title="أقصى عدد من الأساتذة يمكن أن تصل إليه قوة الطفرة.">
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <br>
@@ -642,6 +663,9 @@
                         
                         <label for="lns-ruin-factor-input" style="margin-right: 15px;">معامل التخريب (%):</label>
                         <input type="number" id="lns-ruin-factor-input" value="20" min="5" max="80" style="width: 80px; padding: 5px;" title="نسبة الأساتذة الذين سيتم حذف وإعادة جدولة محاضراتهم في كل دورة"> 
+
+                        <label for="lns-stagnation-threshold-input" style="margin-right: 15px;">عتبة الركود (%):</label>
+                        <input type="number" id="lns-stagnation-threshold-input" value="25" min="5" max="50" step="5" style="width: 80px; padding: 5px;" title="نسبة مئوية من إجمالي التكرارات. بعد هذا العدد من الدورات بدون تحسن، سيتم تفعيل الطفرة القوية.">
                     </div>
 
                     <br>
@@ -659,6 +683,9 @@
                         
                         <label for="vns-local-search-iterations" style="margin-right: 15px;">تكرارات البحث المحلي:</label>
                         <input type="number" id="vns-local-search-iterations" value="3" min="0" max="50" style="width: 80px; padding: 5px;" title="عدد محاولات التحسين الإضافية بعد كل هزة. القيمة 0 تعطل هذه الميزة.">
+
+                        <label for="vns-stagnation-threshold-input" style="margin-right: 15px;">عتبة الركود (%):</label>
+                        <input type="number" id="vns-stagnation-threshold-input" value="20" min="5" max="50" step="5" style="width: 80px; padding: 5px;" title="نسبة مئوية من إجمالي التكرارات. بعد هذا العدد من الدورات بدون تحسن، سيتم تفعيل الطفرة القوية.">
                     </div>
 
                     <br>
