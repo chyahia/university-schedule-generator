@@ -1312,23 +1312,7 @@ def run_genetic_algorithm(log_q, lectures_to_schedule, days, slots, rooms_data, 
             progress_percentage = calculate_progress_percentage(errors_for_best)
             log_q.put(f"PROGRESS:{progress_percentage:.1f}")
 
-        # تحديث عداد الركود ومنطق الطفرة التكيفية
-        # --- ✨ بداية الكود الجديد والصحيح --- ✨
-        if best_fitness_so_far > last_best_fitness:
-            # 1. حدث تحسن
-            stagnation_counter = 0  # أعد تصفير عداد الركود
-            current_mutation_rate = base_mutation_rate  # ✨ الأهم: أعد الطفرة إلى قيمتها الأساسية
-            log_q.put(f'   - (تكيف) حدث تحسن، تم إعادة الطفرة إلى المعدل الأساسي {current_mutation_rate:.2%}')
-        else:
-            # 2. لم يحدث تحسن (ركود)
-            stagnation_counter += 1
-            # تحقق مما إذا كنا قد وصلنا إلى عتبة الركود
-            if stagnation_counter > 0 and stagnation_counter % STAGNATION_THRESHOLD == 0:
-                current_mutation_rate = min(MAX_MUTATION_RATE, current_mutation_rate * 2)
-                log_q.put(f'   - (تكيف) البحث عالق، تم رفع معدل الطفرة إلى {current_mutation_rate:.2%}')
-
-        last_best_fitness = best_fitness_so_far
-        # --- ✨ نهاية الكود الجديد والصحيح --- ✨
+        
         
         
         if best_fitness_so_far == (0, 0, 0):
@@ -1354,7 +1338,8 @@ def run_genetic_algorithm(log_q, lectures_to_schedule, days, slots, rooms_data, 
                     level_specific_large_rooms, specific_small_room_assignments, constraint_severities, consecutive_large_hall_rule, 
                     prefer_morning_slots,
                     extra_teachers_on_hard_error=mutation_hard_intensity,
-                    soft_error_shake_probability=mutation_soft_probability, non_sharing_teacher_pairs=non_sharing_teacher_pairs
+                    soft_error_shake_probability=mutation_soft_probability, 
+                    non_sharing_teacher_pairs=non_sharing_teacher_pairs, stagnation_counter=stagnation_counter
                 )
                 next_generation.append(mutated_child1)
             else:
@@ -1370,11 +1355,30 @@ def run_genetic_algorithm(log_q, lectures_to_schedule, days, slots, rooms_data, 
                         level_specific_large_rooms, specific_small_room_assignments, constraint_severities, consecutive_large_hall_rule, 
                         prefer_morning_slots,
                         extra_teachers_on_hard_error=mutation_hard_intensity,
-                        soft_error_shake_probability=mutation_soft_probability, non_sharing_teacher_pairs=non_sharing_teacher_pairs
+                        soft_error_shake_probability=mutation_soft_probability, 
+                        non_sharing_teacher_pairs=non_sharing_teacher_pairs, stagnation_counter=stagnation_counter
                     )
                     next_generation.append(mutated_child2)
                 else:
                     next_generation.append(child2)
+        
+        # === ✨✨ بداية الإضافة: آلية تجديد السكان ✨✨ ===
+        
+        # 1. تحديد عدد الحلول التي سيتم استبدالها (مثلاً 10%)
+        # يمكنك تعديل النسبة (0.10) حسب الحاجة
+        # num_to_replace = max(1, int(ga_population_size * 0.10)) 
+
+        # 2. إنشاء حلول عشوائية جديدة
+        # new_random_solutions = create_initial_population(
+        #     num_to_replace, lectures_to_schedule, days, slots, rooms_data, all_levels, 
+        #     level_specific_large_rooms, specific_small_room_assignments
+        # )
+
+        # 3. استبدال أسوأ الحلول في الجيل القادم بالحلول العشوائية الجديدة
+        # next_generation = next_generation[:-num_to_replace] + new_random_solutions
+        
+        # === ✨✨ نهاية الإضافة ✨✨
+        
         
         population = next_generation
         # --- نهاية الجزء المضاف ---
@@ -2089,21 +2093,7 @@ def run_memetic_algorithm(log_q, lectures_to_schedule, days, slots, rooms_data, 
             progress_percentage = calculate_progress_percentage(best_failures_list)
             log_q.put(f"PROGRESS:{progress_percentage:.1f}")
 
-        # --- ✨ بداية الكود الجديد والصحيح --- ✨
-        if best_fitness_so_far > last_best_fitness:
-            # 1. حدث تحسن
-            stagnation_counter = 0
-            current_mutation_rate = base_mutation_rate
-            log_q.put(f'   - (تكيف) حدث تحسن، تم إعادة الطفرة إلى المعدل الأساسي {current_mutation_rate:.2%}')
-        else:
-            # 2. لم يحدث تحسن (ركود)
-            stagnation_counter += 1
-            if stagnation_counter > 0 and stagnation_counter % STAGNATION_THRESHOLD == 0:
-                current_mutation_rate = min(MAX_MUTATION_RATE, current_mutation_rate * 2)
-                log_q.put(f'   - (تكيف) البحث عالق، تم رفع معدل الطفرة إلى {current_mutation_rate:.2%}')
-
-        last_best_fitness = best_fitness_so_far
-        # --- ✨ نهاية الكود الجديد والصحيح --- ✨
+        
         
 
         if best_fitness_so_far == (0, 0, 0):
@@ -2128,7 +2118,8 @@ def run_memetic_algorithm(log_q, lectures_to_schedule, days, slots, rooms_data, 
                     level_specific_large_rooms, specific_small_room_assignments, constraint_severities, consecutive_large_hall_rule, 
                     prefer_morning_slots,
                     extra_teachers_on_hard_error=mutation_hard_intensity,
-                    soft_error_shake_probability=mutation_soft_probability, non_sharing_teacher_pairs=non_sharing_teacher_pairs
+                    soft_error_shake_probability=mutation_soft_probability, 
+                    non_sharing_teacher_pairs=non_sharing_teacher_pairs, stagnation_counter=stagnation_counter
                 )
             else:
                 mutated_child1 = child1
@@ -2151,7 +2142,8 @@ def run_memetic_algorithm(log_q, lectures_to_schedule, days, slots, rooms_data, 
                         level_specific_large_rooms, specific_small_room_assignments, constraint_severities, consecutive_large_hall_rule, 
                         prefer_morning_slots,
                         extra_teachers_on_hard_error=mutation_hard_intensity,
-                        soft_error_shake_probability=mutation_soft_probability, non_sharing_teacher_pairs=non_sharing_teacher_pairs
+                        soft_error_shake_probability=mutation_soft_probability, 
+                        non_sharing_teacher_pairs=non_sharing_teacher_pairs, stagnation_counter=stagnation_counter
                     )
                 else:
                     mutated_child2 = child2
@@ -2165,6 +2157,23 @@ def run_memetic_algorithm(log_q, lectures_to_schedule, days, slots, rooms_data, 
                 )
                 next_generation.append(improved_child2)
 
+        # === ✨✨ بداية الإضافة: آلية تجديد السكان ✨✨ ===
+        
+        # 1. تحديد عدد الحلول التي سيتم استبدالها (مثلاً 10%)
+        # يمكنك تعديل النسبة (0.10) حسب الحاجة
+        # num_to_replace = max(1, int(ma_population_size * 0.10)) 
+
+        # 2. إنشاء حلول عشوائية جديدة
+        # new_random_solutions = create_initial_population(
+        #     num_to_replace, lectures_to_schedule, days, slots, rooms_data, all_levels, 
+        #     level_specific_large_rooms, specific_small_room_assignments
+        # )
+
+        # 3. استبدال أسوأ الحلول في الجيل القادم بالحلول العشوائية الجديدة
+        # next_generation = next_generation[:-num_to_replace] + new_random_solutions
+        
+        # === ✨✨ نهاية الإضافة ✨✨
+        
         population = next_generation
 
     log_q.put('انتهت الخوارزمية الميميتيك.')
@@ -2307,36 +2316,44 @@ def crossover(parent1, parent2, all_levels, days, slots):
     return child1, child2
 
 # ====================== النسخة النهائية والأكثر قوة لدالة الطفرة (مع إعدادات مرنة) =======================
+# ====================== النسخة النهائية والأكثر قوة لدالة الطفرة (مع إعدادات مرنة) =======================
+def _calculate_lecture_regret(lecture, temp_schedule, temp_teacher_schedule, temp_room_schedule, all_possible_slots, **kwargs):
+    """
+    تحسب "درجة الندم" لمحاضرة معينة عن طريق عد عدد الأماكن الصالحة المتاحة لها.
+    """
+    valid_placements = 0
+    for day_idx, slot_idx in all_possible_slots:
+        is_valid, _ = is_placement_valid(
+            lecture, day_idx, slot_idx, temp_schedule, temp_teacher_schedule, temp_room_schedule, **kwargs
+        )
+        if is_valid:
+            valid_placements += 1
+    return valid_placements
+
+# ====================== النسخة النهائية والمدمجة من دالة الطفرة (مع التصحيح) =======================
+# ====================== النسخة النهائية والمدمجة من دالة الطفرة (مع التصحيح) =======================
 def mutate(
     schedule, all_lectures, days, slots, rooms_data, teachers, all_levels,
-    # المعاملات الإضافية الضرورية للتشخيص والجدولة الذكية
     teacher_constraints, special_constraints, identifiers_by_level, rules_grid, lectures_by_teacher_map,
     globally_unavailable_slots, saturday_teachers, day_to_idx, 
     level_specific_large_rooms, specific_small_room_assignments, constraint_severities, consecutive_large_hall_rule, 
     prefer_morning_slots,
     extra_teachers_on_hard_error,
     soft_error_shake_probability,
-    mutation_intensity=1.0, non_sharing_teacher_pairs=[]
+    stagnation_counter=0,
+    mutation_intensity=1.0, 
+    non_sharing_teacher_pairs=[]
     ):
     """
-    تقوم بطفرة ذكية وموجهة:
-    - تستهدف الأخطاء الصعبة وتضيف معها هزة عشوائية لفتح المجال.
-    - إذا كان الجدول مثاليًا، تقوم بهزة عشوائية بشدة متغيرة.
-    (نسخة نهائية للخروج من الحلول المثلى المحلية مع إعدادات مرنة)
+    تقوم بطفرة ذكية وموجهة (نسخة مدمجة):
+    - شدة متكيفة (Adaptive Intensity) بناءً على الركود.
+    - هزة مترابطة (Related Shake) لاستهداف ذكي.
+    - إصلاح بالندم (Regret Repair) لإعادة بناء فعالة.
     """
-    # ================= ✨ إعدادات قوة الطفرة (يمكن تعديلها) ✨ =================
-    # عدد الأساتذة العشوائيين الإضافيين الذين سيتم هزهم عند وجود خطأ صعب
-    # extra_teachers_on_hard_error = 3 
-    
-    # ✨ معامل جديد للتحكم في احتمالية الهزة الإضافية عند وجود خطأ بسيط ✨
-    # (القيمة تكون بين 0.0 و 1.0. مثلاً: 0.5 = 50%، و 0.0 = تعطيل الميزة)
-    # soft_error_shake_probability = 0.5 
-    # =========================================================================
-
     mutated_schedule = copy.deepcopy(schedule)
     teachers_to_shake = []
 
-    # --- 1. تشخيص الأخطاء وتحديد الأساتذة المستهدفين ---
+    # --- 1. تشخيص الأخطاء ---
     current_failures = calculate_schedule_cost(
         mutated_schedule, days, slots, teachers, rooms_data, all_levels,
         identifiers_by_level, special_constraints, teacher_constraints, 'allowed',
@@ -2349,48 +2366,70 @@ def mutate(
     scheduled_ids = {lec.get('id') for grid in mutated_schedule.values() for day in grid for slot in day for lec in slot}
     unplaced_lectures = [lec for lec in all_lectures if lec.get('id') not in scheduled_ids and lec.get('teacher_name')]
     
+    # --- 2. تحديد الأساتذة المستهدفين وآلية الهزة ---
+    adaptive_bonus = stagnation_counter // 10
+    
+    base_intensity = math.ceil(mutation_intensity * extra_teachers_on_hard_error) if mutation_intensity > 1.0 else extra_teachers_on_hard_error
+    
     if unplaced_lectures:
         teacher_name = random.choice(unplaced_lectures).get('teacher_name')
-        if teacher_name:
-            teachers_to_shake.append(teacher_name)
+        if teacher_name: teachers_to_shake.append(teacher_name)
     else:
         teachers_with_hard_errors = {err.get('teacher_name') for err in current_failures if err.get('teacher_name') and err.get('penalty', 1) >= 100}
-        teachers_with_soft_errors = {err.get('teacher_name') for err in current_failures if err.get('teacher_name') and err.get('penalty', 1) < 100}
-
+        
         if teachers_with_hard_errors:
             main_teacher = random.choice(list(teachers_with_hard_errors))
             teachers_to_shake.append(main_teacher)
-            other_teachers = [t['name'] for t in teachers if t['name'] != main_teacher]
-            if other_teachers and extra_teachers_on_hard_error > 0:
-                num_extra = min(len(other_teachers), extra_teachers_on_hard_error)
-                teachers_to_shake.extend(random.sample(other_teachers, num_extra))
+            
+            final_intensity = base_intensity + adaptive_bonus
+            
+            teacher_work_days = defaultdict(set)
+            for level_grid in mutated_schedule.values():
+                for d, day_slots in enumerate(level_grid):
+                    for lects in day_slots:
+                        for l in lects:
+                            if l.get('teacher_name'): teacher_work_days[l['teacher_name']].add(d)
+            main_teacher_days = teacher_work_days.get(main_teacher, set())
+            related_teachers = [t['name'] for t in teachers if t['name'] != main_teacher and main_teacher_days.intersection(teacher_work_days.get(t['name'], set()))]
+            unrelated_teachers = [t['name'] for t in teachers if t['name'] != main_teacher and t['name'] not in related_teachers]
+            num_extra = min(len(related_teachers) + len(unrelated_teachers), final_intensity)
+            if num_extra > 0:
+                num_from_related = min(len(related_teachers), num_extra)
+                teachers_to_shake.extend(random.sample(related_teachers, num_from_related))
+                num_remaining_to_pick = num_extra - num_from_related
+                if num_remaining_to_pick > 0 and unrelated_teachers:
+                    num_from_unrelated = min(len(unrelated_teachers), num_remaining_to_pick)
+                    teachers_to_shake.extend(random.sample(unrelated_teachers, num_from_unrelated))
 
-        elif teachers_with_soft_errors:
-            main_teacher = random.choice(list(teachers_with_soft_errors))
-            teachers_to_shake.append(main_teacher)
-            # استخدام معامل التحكم الجديد لتطبيق الاحتمالية
-            if random.random() < soft_error_shake_probability:
+        elif any(f.get('teacher_name') for f in current_failures):
+            teachers_with_soft_errors = {err.get('teacher_name') for err in current_failures if err.get('teacher_name') and err.get('penalty', 1) < 100}
+            if teachers_with_soft_errors:
+                main_teacher = random.choice(list(teachers_with_soft_errors))
+                teachers_to_shake.append(main_teacher)
+                
+                # === ✨✨✨ التصحيح الذي تم إجراؤه هنا ✨✨✨ ===
+                # استخدام math.ceil يضمن أن القوة الأساسية تكون 1 على الأقل إذا كانت النسبة أكبر من صفر
+                base_intensity_soft = math.ceil(soft_error_shake_probability)
+                
+                final_intensity_soft = base_intensity_soft + adaptive_bonus
+                
                 other_teachers = [t['name'] for t in teachers if t['name'] != main_teacher]
-                if other_teachers:
-                    teachers_to_shake.append(random.choice(other_teachers))
-        
+                if other_teachers and final_intensity_soft > 0:
+                    num_extra = min(len(other_teachers), final_intensity_soft)
+                    teachers_to_shake.extend(random.sample(other_teachers, num_extra))
         elif teachers:
             num_to_shake = max(1, int(len(teachers) * 0.1 * mutation_intensity))
-            num_to_shake = min(num_to_shake, len(teachers))
             selected_teachers = random.sample(teachers, num_to_shake)
             teachers_to_shake = [t['name'] for t in selected_teachers]
 
-    # --- 2. تنفيذ "الهزة" وإعادة البناء ---
-    if not teachers_to_shake:
-        return mutated_schedule
+    # --- 3. تنفيذ التدمير والإصلاح الموجه بالندم ---
+    if not teachers_to_shake: return mutated_schedule
 
     unique_teachers_to_shake = list(set(teachers_to_shake))
-    
-    lectures_for_teachers = [lec for lec in all_lectures if lec.get('teacher_name') in unique_teachers_to_shake]
-    if not lectures_for_teachers: 
-        return mutated_schedule
+    lectures_to_reinsert = [lec for lec in all_lectures if lec.get('teacher_name') in unique_teachers_to_shake]
+    if not lectures_to_reinsert: return mutated_schedule
 
-    ids_to_remove = {lec['id'] for lec in lectures_for_teachers}
+    ids_to_remove = {lec['id'] for lec in lectures_to_reinsert}
     for level_grid in mutated_schedule.values():
         for day_slots in level_grid:
             for slot_lectures in day_slots:
@@ -2405,24 +2444,37 @@ def mutate(
                     if lec.get('teacher_name'): teacher_schedule_rebuild[lec['teacher_name']].add((day_idx, slot_idx))
                     if lec.get('room'): room_schedule_rebuild[lec.get('room')].add((day_idx, slot_idx))
 
-    primary_slots, reserve_slots = [], []
-    for day_idx in range(len(days)):
-        for slot_idx in range(len(slots)):
-            is_primary = any(rule.get('rule_type') == 'SPECIFIC_LARGE_HALL' for rule in rules_grid[day_idx][slot_idx])
-            (primary_slots if is_primary else reserve_slots).append((day_idx, slot_idx))
+    all_possible_slots = [(d, s) for d in range(len(days)) for s in range(len(slots))]
+    kwargs_for_regret = {
+        "rooms_data": rooms_data, "teacher_constraints": teacher_constraints, "special_constraints": special_constraints,
+        "identifiers_by_level": identifiers_by_level, "rules_grid": rules_grid, "globally_unavailable_slots": globally_unavailable_slots,
+        "saturday_teachers": saturday_teachers, "day_to_idx": day_to_idx, "level_specific_large_rooms": level_specific_large_rooms,
+        "specific_small_room_assignments": specific_small_room_assignments, "consecutive_large_hall_rule": consecutive_large_hall_rule
+    }
 
-    for lecture in lectures_for_teachers:
+    while lectures_to_reinsert:
+        lecture_with_regret = []
+        for lec in lectures_to_reinsert:
+            regret_score = _calculate_lecture_regret(
+                lec, mutated_schedule, teacher_schedule_rebuild, room_schedule_rebuild, all_possible_slots, **kwargs_for_regret
+            )
+            lecture_with_regret.append((lec, regret_score))
+        
+        lecture_with_regret.sort(key=lambda x: x[1])
+        most_constrained_lecture = lecture_with_regret[0][0]
+
         find_slot_for_single_lecture(
-            lecture, mutated_schedule, teacher_schedule_rebuild, room_schedule_rebuild, 
+            most_constrained_lecture, mutated_schedule, teacher_schedule_rebuild, room_schedule_rebuild, 
             days, slots, rules_grid, rooms_data, teacher_constraints, globally_unavailable_slots, 
-            special_constraints, primary_slots, reserve_slots, identifiers_by_level,
+            special_constraints, [], all_possible_slots, identifiers_by_level,
             True, saturday_teachers, day_to_idx, level_specific_large_rooms, 
             specific_small_room_assignments, consecutive_large_hall_rule, prefer_morning_slots
         )
         
+        lectures_to_reinsert = [lec for lec in lectures_to_reinsert if lec['id'] != most_constrained_lecture['id']]
+        
     return mutated_schedule
-
-
+    
 # ======================== بداية الدالة المساعدة الجديدة ========================
 def run_greedy_search_for_best_result(
     log_q, lectures_sorted, days, slots, rules_grid, rooms_data, teachers, all_levels,
@@ -5757,8 +5809,11 @@ def run_clonalg(log_q, lectures_to_schedule, days, slots, rooms_data, teachers, 
                     clone, lectures_to_schedule, days, slots, rooms_data, teachers, all_levels,
                     teacher_constraints, special_constraints, identifiers_by_level, rules_grid, lectures_by_teacher_map,
                     globally_unavailable_slots, saturday_teachers, day_to_idx, 
-                    level_specific_large_rooms, specific_small_room_assignments, constraint_severities, consecutive_large_hall_rule, 
-                    prefer_morning_slots, mutation_intensity=intensity,
+                    level_specific_large_rooms, specific_small_room_assignments, 
+                    constraint_severities, 
+                    consecutive_large_hall_rule, 
+                    prefer_morning_slots, 
+                    mutation_intensity=intensity,
                     extra_teachers_on_hard_error=mutation_hard_intensity,
                     soft_error_shake_probability=mutation_soft_probability, non_sharing_teacher_pairs=non_sharing_teacher_pairs
                 )
@@ -5777,6 +5832,23 @@ def run_clonalg(log_q, lectures_to_schedule, days, slots, rooms_data, teachers, 
         
         # 3. الجيل القادم يتكون من أفضل الحلول من المجموعة المدمجة
         population = [item[0] for item in combined_population[:population_size]]
+
+        # === ✨✨ بداية الإضافة: آلية تجديد السكان ✨✨ ===
+        
+        # 1. تحديد عدد الحلول التي سيتم استبدالها (مثلاً 10% من حجم السكان)
+        # num_to_replace = max(1, int(population_size * 0.10)) 
+
+        # 2. إنشاء حلول عشوائية جديدة باستخدام دالتنا المساعدة
+        # new_random_solutions = create_initial_population(
+        #     num_to_replace, lectures_to_schedule, days, slots, rooms_data, all_levels, 
+        #     level_specific_large_rooms, specific_small_room_assignments
+        # )
+
+        # 3. استبدال أسوأ الحلول في الجيل الحالي بالحلول العشوائية الجديدة
+        # (أسوأ الحلول هي الأخيرة في القائمة بعد ترتيبها في الخطوة السابقة)
+        # population = population[:-num_to_replace] + new_random_solutions
+        
+        # === ✨✨ نهاية الإضافة ✨✨
 
     # 3. المقطع الختامي الموحد لإرجاع النتيجة
     log_q.put('انتهت خوارزمية التحسين بالاستنساخ.')

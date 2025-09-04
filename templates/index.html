@@ -625,8 +625,8 @@
                             <input type="number" id="mutation-hard-error-intensity" value="3" min="0" step="1" style="width: 80px; padding: 5px;" title="عدد الأساتذة العشوائيين الذين سيتم إعادة جدولتها بالكامل عند وجود خطأ صعب.">
                         </div>
                         <div style="margin-top: 10px;">
-                            <label for="mutation-soft-error-probability">احتمالية الهزة الإضافية عند وجود خطأ بسيط (%):</label>
-                            <input type="number" id="mutation-soft-error-probability" value="50" min="0" max="100" step="5" style="width: 80px; padding: 5px;" title="احتمالية إعادة جدولة أستاذ عشوائي إضافي عند وجود خطأ بسيط. 50% تعني فرصة 1 من 2.">
+                            <label for="mutation-soft-error-probability">عدد الأساتذة الإضافيين عند وجود خطأ بسيط:</label>
+                            <input type="number" id="mutation-soft-error-probability" value="1" min="0" max="10" step="1" style="width: 80px; padding: 5px;" title="عدد الأساتذة العشوائيين الذين ستتم إعادة جدولتهم بالكامل عند وجود خطأ بسيط. القيمة 0 تعطل هذه الميزة.">
                         </div>
                         <div style="margin-top: 10px;">
                             <label for="ga-stagnation-threshold">عتبة الركود (%):</label>

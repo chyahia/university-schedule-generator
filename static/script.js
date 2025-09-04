@@ -438,7 +438,7 @@ function collectAllCurrentSettings() {
         clonalg_selection_size: document.getElementById('clonalg-selection-input').value,
         clonalg_clone_factor: document.getElementById('clonalg-clone-factor-input').value,
         mutation_hard_error_intensity: document.getElementById('mutation-hard-error-intensity').value,
-        mutation_soft_error_probability: (parseFloat(document.getElementById('mutation-soft-error-probability').value) / 100.0).toString(),
+        mutation_soft_error_probability: document.getElementById('mutation-soft-error-probability').value,
         ga_stagnation_threshold: document.getElementById('ga-stagnation-threshold').value,
         mutation_initial_intensity: document.getElementById('mutation-initial-intensity').value,
         mutation_increment: document.getElementById('mutation-increment').value,
@@ -1969,7 +1969,7 @@ function applySettingsToUI(settings) {
         document.getElementById('clonalg-selection-input').value = algoSettings.clonalg_selection_size || 10;
         document.getElementById('clonalg-clone-factor-input').value = algoSettings.clonalg_clone_factor || 1.0;
         document.getElementById('mutation-hard-error-intensity').value = algoSettings.mutation_hard_error_intensity || 3;
-        document.getElementById('mutation-soft-error-probability').value = (parseFloat(algoSettings.mutation_soft_error_probability || 0.5) * 100.0);
+        document.getElementById('mutation-soft-error-probability').value = algoSettings.mutation_soft_error_probability || '1';
         document.getElementById('ga-stagnation-threshold').value = algoSettings.ga_stagnation_threshold || 15;
         document.getElementById('mutation-initial-intensity').value = algoSettings.mutation_initial_intensity || 4;
         document.getElementById('mutation-increment').value = algoSettings.mutation_increment || 3;
@@ -2699,7 +2699,7 @@ function loadSettingsAndBuildUI() {
             document.getElementById('clonalg-selection-input').value = algo.clonalg_selection_size || 10;
             document.getElementById('clonalg-clone-factor-input').value = algo.clonalg_clone_factor || 1.0;
             document.getElementById('mutation-hard-error-intensity').value = algo.mutation_hard_error_intensity || 3;
-            document.getElementById('mutation-soft-error-probability').value = (parseFloat(algo.mutation_soft_error_probability || 0.5) * 100.0);
+            document.getElementById('mutation-soft-error-probability').value = algo.mutation_soft_error_probability || '1';
             document.getElementById('ga-stagnation-threshold').value = algo.ga_stagnation_threshold || 15;
             document.getElementById('mutation-initial-intensity').value = algo.mutation_initial_intensity || 4;
             document.getElementById('mutation-increment').value = algo.mutation_increment || 3;
