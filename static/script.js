@@ -1274,20 +1274,26 @@ function handleBulkExport(url, scheduleData, button, originalText) {
         }
         
         // ================== بداية الجزء المُعدل ==================
-        // شيفرة جديدة ومحسنة لاستخراج اسم الملف بشكل صحيح
         const header = response.headers.get('Content-Disposition');
-        let filename = 'جدول.xlsx'; // اسم افتراضي في حالة عدم العثور على اسم
+        let filename;
         if (header) {
-            // RFC 6266 (يبحث عن الصيغة الحديثة التي تدعم كل الحروف)
             const filenameStarMatch = /filename\*=UTF-8''([^;]+)/.exec(header);
             if (filenameStarMatch && filenameStarMatch[1]) {
                 filename = decodeURIComponent(filenameStarMatch[1]);
             } else {
-                // RFC 2616 (إذا لم يجد الصيغة الحديثة، يبحث عن الصيغة القديمة)
                 const filenameMatch = /filename="([^"]+)"/.exec(header);
                 if (filenameMatch && filenameMatch[1]) {
                     filename = filenameMatch[1];
                 }
+            }
+        }
+        
+        // --- تعديل: إذا لم يتم العثور على اسم ملف، نستنتجه من النص الأصلي للزر ---
+        if (!filename) {
+            if (originalText.includes('Word')) {
+                filename = originalText.replace('(Word)', '').trim() + '.docx';
+            } else {
+                filename = originalText.replace('(Excel)', '').trim() + '.xlsx';
             }
         }
         // ================== نهاية الجزء المُعدل ==================
@@ -1593,12 +1599,13 @@ function displaySchedules(scheduleData, days, slots) {
     }
 
     // 1. إنشاء الحاوية الرئيسية وتغيير تنسيقها لترتيب العناصر عمودياً
+    // ================== بداية الكود الصحيح والمُدمج ==================
     const buttonsContainer = document.createElement('div');
     buttonsContainer.className = 'export-buttons-container';
-    buttonsContainer.style.flexDirection = 'column'; // لجعل الصفوف تحت بعضها
-    buttonsContainer.style.alignItems = 'center'; // لتوسيط الصفوف
+    buttonsContainer.style.flexDirection = 'column';
+    buttonsContainer.style.alignItems = 'center';
 
-    // 2. إنشاء الصف الأول لأزرار التصدير
+    // --- الصف الأول: أزرار الإكسل ---
     const row1 = document.createElement('div');
     row1.style.display = 'flex';
     row1.style.gap = '15px';
@@ -1610,7 +1617,12 @@ function displaySchedules(scheduleData, days, slots) {
     exportLevelsBtn.addEventListener('click', () => {
         if (!currentScheduleData.schedule) { alert('بيانات المستويات غير جاهزة.'); return; }
         const dataToExport = { schedule: currentScheduleData.schedule, days: days, slots: slots };
-        handleBulkExport('/api/export/all-levels', dataToExport, exportLevelsBtn, 'تصدير جداول المستويات (Excel)');
+        handleBulkExport(
+            '/api/export/all-levels', 
+            dataToExport, 
+            exportLevelsBtn, 
+            'تصدير جداول المستويات (Excel)'
+        );
     });
     row1.appendChild(exportLevelsBtn);
 
@@ -1619,16 +1631,60 @@ function displaySchedules(scheduleData, days, slots) {
     exportProfessorsBtn.addEventListener('click', () => {
         if (!currentScheduleByProfessor) { alert('بيانات الأساتذة غير جاهزة.'); return; }
         const dataToExport = { schedule: currentScheduleByProfessor, days: days, slots: slots };
-        handleBulkExport('/api/export/all-professors', dataToExport, exportProfessorsBtn, 'تصدير جداول الأساتذة (Excel)');
+        handleBulkExport(
+            '/api/export/all-professors', 
+            dataToExport, 
+            exportProfessorsBtn, 
+            'تصدير جداول الأساتذة (Excel)'
+        );
     });
     row1.appendChild(exportProfessorsBtn);
 
-    // 3. إنشاء الصف الثاني لأزرار الحفظ
+    // --- الصف الثاني: أزرار الوورد ---
+    const wordExportRow = document.createElement('div');
+    wordExportRow.style.display = 'flex';
+    wordExportRow.style.gap = '15px';
+    wordExportRow.style.justifyContent = 'center';
+    wordExportRow.style.width = '100%';
+    wordExportRow.style.marginTop = '10px';
+
+    const exportLevelsWordBtn = document.createElement('button');
+    exportLevelsWordBtn.textContent = 'تصدير جداول المستويات (Word)';
+    exportLevelsWordBtn.style.backgroundColor = '#007bff';
+    exportLevelsWordBtn.addEventListener('click', () => {
+        if (!currentScheduleData.schedule) { alert('بيانات المستويات غير جاهزة.'); return; }
+        const dataToExport = { schedule: currentScheduleData.schedule, days: days, slots: slots };
+        handleBulkExport(
+            '/api/export/word/all-levels', 
+            dataToExport, 
+            exportLevelsWordBtn, 
+            'تصدير جداول المستويات (Word)'
+        );
+    });
+    wordExportRow.appendChild(exportLevelsWordBtn);
+    
+    const exportProfessorsWordBtn = document.createElement('button');
+    exportProfessorsWordBtn.textContent = 'تصدير جداول الأساتذة (Word)';
+    exportProfessorsWordBtn.style.backgroundColor = '#007bff';
+    exportProfessorsWordBtn.addEventListener('click', () => {
+        if (!currentScheduleByProfessor) { alert('بيانات الأساتذة غير جاهزة.'); return; }
+        const dataToExport = { schedule: currentScheduleByProfessor, days: days, slots: slots };
+        handleBulkExport(
+            '/api/export/word/all-professors', 
+            dataToExport, 
+            exportProfessorsWordBtn, 
+            'تصدير جداول الأساتذة (Word)'
+        );
+    });
+    wordExportRow.appendChild(exportProfessorsWordBtn);
+    
+    // --- الصف الثالث: أزرار الحفظ وبقية الأزرار ---
     const row2 = document.createElement('div');
     row2.style.display = 'flex';
     row2.style.gap = '15px';
     row2.style.justifyContent = 'center';
     row2.style.width = '100%';
+    row2.style.marginTop = '10px';
 
     const saveResultBtn1 = document.createElement('button');
     saveResultBtn1.id = 'save-result-1-btn';
@@ -1642,12 +1698,13 @@ function displaySchedules(scheduleData, days, slots) {
     saveResultBtn2.style.backgroundColor = '#148a9d';
     row2.appendChild(saveResultBtn2);
 
-    // 4. إنشاء الصف الثالث لبقية الأزرار
+    // --- الصف الرابع: بقية الأزرار ---
     const row3 = document.createElement('div');
     row3.style.display = 'flex';
     row3.style.gap = '15px';
     row3.style.justifyContent = 'center';
     row3.style.width = '100%';
+    row3.style.marginTop = '10px';
     
     const toggleFreeRoomsBtn = document.createElement('button');
     toggleFreeRoomsBtn.textContent = 'إظهار القاعات الشاغرة';
@@ -1679,10 +1736,12 @@ function displaySchedules(scheduleData, days, slots) {
     manualEditBtn.addEventListener('click', toggleManualEditingMode);
     row3.appendChild(manualEditBtn);
     
-    // 5. إضافة الصفوف إلى الحاوية الرئيسية
+    // --- إضافة كل الصفوف إلى الحاوية الرئيسية ---
     buttonsContainer.appendChild(row1);
+    buttonsContainer.appendChild(wordExportRow); // <-- إضافة صف الوورد الجديد
     buttonsContainer.appendChild(row2);
     buttonsContainer.appendChild(row3);
+    // ================== نهاية الكود الصحيح والمُدمج ==================
     
     outputDiv.appendChild(buttonsContainer);
 

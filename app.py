@@ -35,6 +35,12 @@ import math
 import traceback
 from collections import deque
 from collections import defaultdict, Counter
+from docx import Document
+from docx.shared import Cm
+from docx.enum.section import WD_ORIENT
+from docx.oxml.ns import qn
+from docx.oxml import OxmlElement
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 # ================== الجزء الثاني: إعداد قاعدة البيانات والمسارات ==================
 def get_base_path():
@@ -4367,6 +4373,70 @@ def process_and_format_sheet(writer, df, sheet_name, title=None, sheet_type=None
         worksheet.write(start_row, col_num + 1, value, header_format)
     worksheet.write(start_row, 0, df.index.name, header_format)
 
+def create_word_document_with_table(doc, title, headers, data_grid):
+    """
+    يضيف عنواناً وجدولاً إلى مستند وورد موجود مع دعم كامل للغة العربية (RTL).
+    """
+    # إضافة العنوان قبل الجدول
+    heading = doc.add_heading(title, level=2)
+    heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    pPr = heading._p.get_or_add_pPr()
+    bidi = OxmlElement('w:bidi')
+    bidi.set(qn('w:val'), '1')
+    pPr.append(bidi)
+
+    # إنشاء الجدول
+    table = doc.add_table(rows=1, cols=len(headers))
+    table.style = 'Table Grid'
+    table.autofit = False # منع الضبط التلقائي الذي قد يسبب مشاكل
+
+    # تعيين اتجاه الجدول بالكامل من اليمين لليسار
+    tbl_pr = table._element.xpath('w:tblPr')[0]
+    bidi_visual_element = OxmlElement('w:bidiVisual')
+    tbl_pr.append(bidi_visual_element)
+
+    # تعبئة صف العناوين (Headers)
+    hdr_cells = table.rows[0].cells
+    for i, header in enumerate(headers):
+        cell_paragraph = hdr_cells[i].paragraphs[0]
+        cell_paragraph.text = "" # مسح المحتوى
+        run = cell_paragraph.add_run(header)
+        
+        # --- ✨✨ بداية الحل الجديد والنهائي ✨✨ ---
+        # نصل إلى خصائص الخط مباشرة ونضبطها
+        font = run.font
+        font.rtl = True
+        font.name = 'Arial' # تحديد خط قياسي يدعم العربية جيدًا
+        # --- ✨✨ نهاية الحل الجديد والنهائي ✨✨ ---
+        
+        cell_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER # توسيط العناوين
+        cell_paragraph.paragraph_format.rtl = True
+
+    # تعبئة بيانات الجدول
+    for row_data in data_grid:
+        row_cells = table.add_row().cells
+        for i, cell_data in enumerate(row_data):
+            cell_paragraph = row_cells[i].paragraphs[0]
+            cell_paragraph.text = "" 
+            
+            lines = str(cell_data).split('\n')
+            for idx, line in enumerate(lines):
+                if idx > 0:
+                    cell_paragraph.add_run().add_break()
+                run = cell_paragraph.add_run(line)
+                
+                # --- ✨✨ تطبيق نفس الحل هنا ✨✨ ---
+                font = run.font
+                font.rtl = True
+                font.name = 'Arial'
+                # --- ✨✨ نهاية الحل الجديد والنهائي ✨✨ ---
+            
+            cell_paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT # محاذاة البيانات لليمين
+            cell_paragraph.paragraph_format.rtl = True
+            
+    # إضافة فاصل صفحات
+    doc.add_page_break()
+
 @app.route('/api/export/all-levels', methods=['POST'])
 def export_all_levels():
     # ... (This function and the ones below remain unchanged as they process data in memory)
@@ -4384,6 +4454,53 @@ def export_all_levels():
     output.seek(0)
     # --- السطر التالي هو الذي تم تعديله ---
     return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', as_attachment=True, download_name='جداول المستويات.xlsx')
+
+@app.route('/api/export/word/all-levels', methods=['POST'])
+def export_all_levels_word():
+    data = request.get_json()
+    schedules_by_level, days, slots = data.get('schedule'), data.get('days', []), data.get('slots', [])
+    if not all([schedules_by_level, days, slots]):
+        return jsonify({"error": "بيانات التصدير غير كاملة"}), 400
+
+    # 1. إنشاء مستند جديد
+    doc = Document()
+    
+    # 2. تغيير إعدادات الصفحة (عرضية + هوامش 0.5 سم)
+    section = doc.sections[0]
+    section.orientation = WD_ORIENT.LANDSCAPE
+    # تبديل أبعاد الصفحة بعد تغيير الاتجاه
+    new_width, new_height = section.page_height, section.page_width
+    section.page_width = new_width
+    section.page_height = new_height
+    # تعيين الهوامش
+    margin_size = Cm(0.5)
+    section.top_margin = margin_size
+    section.bottom_margin = margin_size
+    section.left_margin = margin_size
+    section.right_margin = margin_size
+
+    # 3. المرور على كل مستوى وإضافة جدوله
+    level_name_map = {"Bachelor 1": "ليسانس 1", "Bachelor 2": "ليسانس 2", "Bachelor 3": "ليسانس 3", "Master 1": "ماستر 1", "Master 2": "ماستر 2"}
+    headers = ['الوقت'] + days
+
+    for level, grid_data in schedules_by_level.items():
+        processed_data = []
+        for i, slot_name in enumerate(slots):
+            row_content = [slot_name] # أول خلية في الصف هي الوقت
+            for j in range(len(days)):
+                cell_text = "\n".join([f"{lec.get('name', '')}\n{lec.get('teacher_name', '')}\n{lec.get('room', '')}".strip() for lec in grid_data[j][i]])
+                row_content.append(cell_text)
+            processed_data.append(row_content)
+        
+        sheet_name = level_name_map.get(level, level)
+        create_word_document_with_table(doc, sheet_name, headers, processed_data)
+
+    # 4. حفظ المستند في الذاكرة وإرساله
+    output = io.BytesIO()
+    doc.save(output)
+    output.seek(0)
+    
+    return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document', as_attachment=True, download_name='جداول المستويات.docx')
 
 @app.route('/api/export/all-professors', methods=['POST'])
 def export_all_professors():
@@ -4407,6 +4524,48 @@ def export_all_professors():
     output.seek(0)
     # --- السطر التالي هو الذي تم تعديله ---
     return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', as_attachment=True, download_name='جداول الاساتذة.xlsx')
+
+@app.route('/api/export/word/all-professors', methods=['POST'])
+def export_all_professors_word():
+    data = request.get_json()
+    schedules_by_prof, days, slots = data.get('schedule'), data.get('days', []), data.get('slots', [])
+    if not all([schedules_by_prof, days, slots]):
+        return jsonify({"error": "بيانات التصدير غير كاملة"}), 400
+
+    # 1. إنشاء مستند جديد وتعيين الإعدادات
+    doc = Document()
+    section = doc.sections[0]
+    section.orientation = WD_ORIENT.LANDSCAPE
+    new_width, new_height = section.page_height, section.page_width
+    section.page_width = new_width
+    section.page_height = new_height
+    margin_size = Cm(0.5)
+    section.top_margin = margin_size
+    section.bottom_margin = margin_size
+    section.left_margin = margin_size
+    section.right_margin = margin_size
+
+    # 2. المرور على كل أستاذ وإضافة جدوله
+    level_name_map = {"Bachelor 1": "ليسانس 1", "Bachelor 2": "ليسانس 2", "Bachelor 3": "ليسانس 3", "Master 1": "ماستر 1", "Master 2": "ماستر 2"}
+    headers = ['الوقت'] + days
+
+    for prof_name, grid_data in sorted(schedules_by_prof.items()):
+        processed_data = []
+        for i, slot_name in enumerate(slots):
+            row_content = [slot_name]
+            for j in range(len(days)):
+                cell_texts = [f"{lec.get('name', '')}\nالمستوى: {level_name_map.get(lec.get('level', ''), lec.get('level', ''))}\n{lec.get('room', '')}".strip() for lec in grid_data[j][i]]
+                row_content.append("\n".join(cell_texts))
+            processed_data.append(row_content)
+        
+        create_word_document_with_table(doc, prof_name, headers, processed_data)
+
+    # 3. حفظ المستند في الذاكرة وإرساله
+    output = io.BytesIO()
+    doc.save(output)
+    output.seek(0)
+
+    return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document', as_attachment=True, download_name='جداول الاساتذة.docx')
 
 @app.route('/api/export/free-rooms', methods=['POST'])
 def export_free_rooms():
