@@ -1,20 +1,23 @@
 {
     "OTHER": {
-        "VNS_Flexible": 741.0140416275128,
-        "LNS": 71.91311934550006,
-        "Tabu_Search": 663.866930366606,
-        "CLONALG": 89.19126374647617
+        "VNS_Flexible": 19.04413005832572,
+        "LNS": 42.41913762607406,
+        "Tabu_Search": 10.54413005832572,
+        "CLONALG": 19.854130058325723,
+        "Variable_Neighborhood_Search": 32.42037221414009
     },
     "NO_ERRORS": {
         "VNS_Flexible": 0.0,
         "LNS": 0.0,
         "Tabu_Search": 0.0,
-        "CLONALG": 0.0
+        "CLONALG": 0.0,
+        "Variable_Neighborhood_Search": 0.0
     },
     "UNPLACED_LECTURES": {
-        "VNS_Flexible": 172.92793483279553,
-        "LNS": 1098.850714588761,
-        "Tabu_Search": 174.49977664158268,
-        "CLONALG": 0.0
+        "VNS_Flexible": 8.0,
+        "LNS": 190.0,
+        "Tabu_Search": 0.0,
+        "CLONALG": 0.0,
+        "Variable_Neighborhood_Search": 0.0
     }
 }

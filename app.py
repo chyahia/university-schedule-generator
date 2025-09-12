@@ -1562,7 +1562,8 @@ def run_hyper_heuristic(
         "Tabu_Search": run_tabu_search,
         "Memetic_Algorithm": run_memetic_algorithm,
         "Genetic_Algorithm": run_genetic_algorithm,
-        "CLONALG": run_clonalg
+        "CLONALG": run_clonalg,
+        "Variable_Neighborhood_Search": run_variable_neighborhood_search
     }
     if not selected_llh:
         selected_llh = list(all_available_llh.keys())
@@ -1675,34 +1676,64 @@ def run_hyper_heuristic(
             specific_params = {
                 "k_max": int(algorithm_settings.get('vns_k_max', 10)), "initial_schedule": copy.deepcopy(current_solution), 
                 "initial_teacher_schedule": teacher_schedule_from_best, "initial_room_schedule": room_schedule_from_best, 
-                "flexible_categories": flexible_categories, "prioritize_primary": prioritize_primary
+                "flexible_categories": flexible_categories, "prioritize_primary": prioritize_primary,
+                "algorithm_settings": algorithm_settings
             }
         elif action == "LNS":
-            specific_params = {"ruin_factor": float(algorithm_settings.get('lns_ruin_factor', 20)) / 100.0, "prioritize_primary": prioritize_primary}
+            specific_params = {
+                "ruin_factor": float(algorithm_settings.get('lns_ruin_factor', 20)) / 100.0, 
+                "prioritize_primary": prioritize_primary,
+                "mutation_hard_intensity": int(algorithm_settings.get('mutation_hard_error_intensity', 3)),
+                "mutation_soft_probability": float(algorithm_settings.get('mutation_soft_error_probability', 0.5)),
+                "lns_stagnation_threshold": int(algorithm_settings.get('lns_stagnation_threshold', 100))
+            }
+        elif action == "Variable_Neighborhood_Search":
+            specific_params = {
+                "max_iterations": int(algorithm_settings.get('vns_iterations', 300)),
+                "k_max": int(algorithm_settings.get('vns_k_max', 10)),
+                "initial_solution": copy.deepcopy(current_solution),
+                "prioritize_primary": prioritize_primary,
+                "algorithm_settings": algorithm_settings,
+                "mutation_hard_intensity": int(algorithm_settings.get('mutation_hard_error_intensity', 3)),
+                "mutation_soft_probability": float(algorithm_settings.get('mutation_soft_error_probability', 0.5)),
+                "vns_stagnation_threshold": int(algorithm_settings.get('vns_stagnation_threshold', 50))
+            }
         elif action == "Tabu_Search":
             if 'all_levels' in base_params: base_params['levels'] = base_params.pop('all_levels')
             specific_params = {
                 "tabu_tenure": int(algorithm_settings.get('tabu_tenure', 10)), "neighborhood_size": int(algorithm_settings.get('tabu_neighborhood_size', 50)),
-                "initial_solution": copy.deepcopy(current_solution)
+                "initial_solution": copy.deepcopy(current_solution),
+                "mutation_hard_intensity": int(algorithm_settings.get('mutation_hard_error_intensity', 3)),
+                "mutation_soft_probability": float(algorithm_settings.get('mutation_soft_error_probability', 0.5)),
+                "tabu_stagnation_threshold": int(algorithm_settings.get('tabu_stagnation_threshold', 15))
             }
         elif action == "Memetic_Algorithm":
             if 'all_lectures' in base_params: base_params['lectures_to_schedule'] = base_params.pop('all_lectures')
             specific_params = {
                 "ma_population_size": int(algorithm_settings.get('ma_population_size', 40)), "ma_mutation_rate": float(algorithm_settings.get('ma_mutation_rate', 10)) / 100.0,
                 "ma_elitism_count": int(algorithm_settings.get('ma_elitism_count', 2)), "ma_local_search_iterations": int(algorithm_settings.get('ma_local_search_iterations', 5)),
-                "initial_solution_seed": copy.deepcopy(current_solution), "prioritize_primary": prioritize_primary
+                "initial_solution_seed": copy.deepcopy(current_solution), "prioritize_primary": prioritize_primary,
+                "mutation_hard_intensity": int(algorithm_settings.get('mutation_hard_error_intensity', 3)),
+                "mutation_soft_probability": float(algorithm_settings.get('mutation_soft_error_probability', 0.5)),
+                "ga_stagnation_threshold": int(algorithm_settings.get('ga_stagnation_threshold', 15))
             }
         elif action == "Genetic_Algorithm":
             if 'all_lectures' in base_params: base_params['lectures_to_schedule'] = base_params.pop('all_lectures')
             specific_params = {
                 "ga_population_size": int(algorithm_settings.get('ga_population_size', 50)), "ga_mutation_rate": float(algorithm_settings.get('ga_mutation_rate', 5)) / 100.0,
-                "ga_elitism_count": int(algorithm_settings.get('ga_elitism_count', 2)), "initial_solution_seed": copy.deepcopy(current_solution)
+                "ga_elitism_count": int(algorithm_settings.get('ga_elitism_count', 2)), "initial_solution_seed": copy.deepcopy(current_solution),
+                "mutation_hard_intensity": int(algorithm_settings.get('mutation_hard_error_intensity', 3)),
+                "mutation_soft_probability": float(algorithm_settings.get('mutation_soft_error_probability', 0.5)),
+                "ga_stagnation_threshold": int(algorithm_settings.get('ga_stagnation_threshold', 15))
             }
         elif action == "CLONALG":
             if 'all_lectures' in base_params: base_params['lectures_to_schedule'] = base_params.pop('all_lectures')
             specific_params = {
                 "population_size": int(algorithm_settings.get('clonalg_population_size', 50)), "selection_size": int(algorithm_settings.get('clonalg_selection_size', 10)),
-                "clone_factor": float(algorithm_settings.get('clonalg_clone_factor', 1.0)), "initial_solution_seed": copy.deepcopy(current_solution)
+                "clone_factor": float(algorithm_settings.get('clonalg_clone_factor', 1.0)), "initial_solution_seed": copy.deepcopy(current_solution),
+                "mutation_hard_intensity": int(algorithm_settings.get('mutation_hard_error_intensity', 3)),
+                "mutation_soft_probability": float(algorithm_settings.get('mutation_soft_error_probability', 0.5)),
+                "ga_stagnation_threshold": int(algorithm_settings.get('ga_stagnation_threshold', 15))
             }
 
         temp_solution = current_solution 
@@ -1738,6 +1769,7 @@ def run_hyper_heuristic(
 
             elif budget_mode == 'iterations':
                 if action == "VNS_Flexible": specific_params['max_iterations'] = int(algorithm_settings.get('vns_iterations', 300))
+                elif action == "Variable_Neighborhood_Search": specific_params['max_iterations'] = int(algorithm_settings.get('vns_iterations', 300))
                 elif action == "LNS": specific_params['max_iterations'] = int(algorithm_settings.get('lns_iterations', 500))
                 elif action == "Tabu_Search": specific_params['max_iterations'] = int(algorithm_settings.get('tabu_iterations', 1000))
                 elif action == "Memetic_Algorithm": specific_params['ma_generations'] = int(algorithm_settings.get('ma_generations', 100))
@@ -2501,7 +2533,7 @@ def run_greedy_search_for_best_result(
         "failures": [],
         "unplaced_count": float('inf')
     }
-    num_of_runs = 10
+    num_of_runs = 30
     
     for run in range(num_of_runs):
         # في كل محاولة، ابدأ من الجدول المبدئي (الذي قد يحتوي على مواد مثبتة)
@@ -3780,6 +3812,7 @@ def calculate_slot_fitness(teacher_name, day_idx, slot_idx, teacher_schedule, sp
     if prof_constraints.get('end_s4') and slot_idx > 3:
         fitness -= 100  # عقوبة إضافية لوضعها بعد الحصة الرابعة
     # --- نهاية الإضافة الجديدة ---
+    
     # --- الإضافة الجديدة: مكافأة للفترات الصباحية ---
     # إذا كانت الحصة من الثلاثة الأوائل (0, 1, 2)
     if prefer_morning_slots and slot_idx <= 2:
