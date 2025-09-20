@@ -4049,11 +4049,14 @@ def delete_level():
     if not level_to_delete:
         return jsonify({"error": "اسم المستوى مفقود"}), 400
     
-    # التحقق من أن المستوى غير مستخدم في أي مقرر
+    # === بداية الكود المصحح ===
+    # التحقق من أن المستوى غير مستخدم في أي مقرر عبر الجدول الوسيط
     courses_using_level = query_db('''
-        SELECT 1 FROM courses c JOIN levels l ON c.level_id = l.id 
+        SELECT 1 FROM course_levels cl
+        JOIN levels l ON cl.level_id = l.id
         WHERE l.name = ? LIMIT 1
     ''', (level_to_delete,), one=True)
+    # === نهاية الكود المصحح ===
     
     if courses_using_level:
         return jsonify({"error": f"لا يمكن حذف المستوى '{level_to_delete}' لأنه مستخدم في بعض المقررات."}), 409
