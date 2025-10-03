@@ -24,7 +24,7 @@ import signal
 import webbrowser
 import sys
 import random
-import sqlite3 # <-- المكتبة الجديدة لقاعدة البيانات
+import sqlite3
 import copy
 from waitress import serve
 import time
@@ -41,6 +41,8 @@ from docx.enum.section import WD_ORIENT
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+import re
+from openpyxl.styles import Font, Border, Side, Alignment, PatternFill
 
 # ================== الجزء الثاني: إعداد قاعدة البيانات والمسارات ==================
 def get_base_path():
@@ -4615,6 +4617,132 @@ def export_free_rooms():
         process_and_format_sheet(writer, df, 'القاعات الشاغرة')
     output.seek(0)
     return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', as_attachment=True, download_name='جدول_القاعات_الشاغرة.xlsx')
+
+# ================== بداية النسخة النهائية مع إضافة تلوين الصفوف المتناوب ==================
+@app.route('/api/export/teaching-load', methods=['GET'])
+def export_teaching_load():
+    try:
+        all_courses = get_courses().get_json()
+        assigned_courses = [c for c in all_courses if c.get('teacher_name')]
+        courses_by_teacher = defaultdict(list)
+        for course in assigned_courses:
+            courses_by_teacher[course['teacher_name']].append(course)
+
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            workbook = writer.book
+            
+            if 'Sheet' in workbook.sheetnames:
+                workbook.remove(workbook['Sheet'])
+            worksheet = workbook.create_sheet('العبء البيداغوجي', 0)
+            worksheet.sheet_view.rightToLeft = True
+
+            # ✨✨ 1. بداية التعديل: تعريف تنسيق اللون الإضافي ✨✨
+            thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+            header_font = Font(bold=True, color="FFFFFF")
+            header_fill = PatternFill(start_color="4F81BD", end_color="4F81BD", fill_type="solid")
+            header_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+            cell_alignment = Alignment(horizontal='right', vertical='top', wrap_text=True)
+            merged_alignment = Alignment(horizontal='right', vertical='center', wrap_text=True)
+            # تعريف لون الخلفية الفاتح للصفوف الزوجية
+            banded_fill = PatternFill(start_color="F2F2F2", end_color="F2F2F2", fill_type="solid")
+            # ✨✨ نهاية التعديل ✨✨
+
+            headers = ['الرقم', 'اللقب', 'الاسم', 'الرتبة', 'الشهادة', 'تخصص الشهادة', 'المستوى', 'نوع المادة', 'الشعبة', 'التخصص', 'اسم المادة', 'القسم', 'الكلية', 'الحجم الساعي']
+            for col_num, header_title in enumerate(headers, 1):
+                cell = worksheet.cell(row=1, column=col_num)
+                cell.value = header_title
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.border = thin_border
+                cell.alignment = header_alignment
+
+            worksheet.column_dimensions['A'].width = 5
+            worksheet.column_dimensions['B'].width = 30
+            for col_letter in ['C', 'D', 'E', 'F']: worksheet.column_dimensions[col_letter].width = 15
+            for col_letter in ['G', 'H']: worksheet.column_dimensions[col_letter].width = 12
+            for col_letter in ['I', 'J']: worksheet.column_dimensions[col_letter].width = 25
+            worksheet.column_dimensions['K'].width = 45
+            for col_letter in ['L', 'M', 'N']: worksheet.column_dimensions[col_letter].width = 15
+
+            current_row = 2
+            professor_number = 1
+            for teacher_name in sorted(courses_by_teacher.keys()):
+                courses = courses_by_teacher[teacher_name]
+                total_rows_for_teacher = sum(len(c.get('levels', [])) for c in courses)
+                if total_rows_for_teacher == 0: continue
+                
+                teacher_start_row = current_row
+                
+                # ✨✨ 2. بداية التعديل: تحديد ما إذا كان هذا الصف يجب تلوينه ✨✨
+                is_banded_row = (professor_number % 2 == 0)
+                # ✨✨ نهاية التعديل ✨✨
+
+                for course in courses:
+                    for level_name in course.get('levels', []):
+                        # (الكود المنطقي يبقى كما هو بدون تغيير)
+                        course_name_original = course.get('name', '')
+                        trimmed_course_name = re.sub(r'^\(.*\)\s*', '', course_name_original).strip()
+                        level_abbr, course_type, division, specialization = '', 'تطبيق', '', ''
+                        if 'سنة1 ليسانس' in level_name: level_abbr = 'ل1'
+                        elif 'سنة2 ليسانس' in level_name: level_abbr = 'ل2'
+                        elif 'سنة3 ليسانس' in level_name: level_abbr = 'ل3'
+                        elif 'ماستر1' in level_name: level_abbr = 'م1'
+                        elif 'ماستر2' in level_name: level_abbr = 'م2'
+                        if '[مح]' in course_name_original: course_type = 'محاضرة'
+                        course_name_lower = course_name_original.lower()
+                        if level_abbr == 'ل1': division, specialization = 'جذع مشترك', 'جذع مشترك'
+                        elif level_abbr == 'ل2':
+                            if 'كل التخصصات' in course_name_lower: division, specialization = 'كل الشُّعب', 'كل التخصصات'
+                            elif 'د.أدبية' in course_name_lower or 'د أدبية' in course_name_lower: division, specialization = 'دراسات أدبية', 'دراسات أدبية'
+                            elif 'د.نقدية' in course_name_lower or 'د نقدية' in course_name_lower: division, specialization = 'دراسات نقدية', 'دراسات نقدية'
+                            elif 'د.لغوية' in course_name_lower or 'د لغوية' in course_name_lower: division, specialization = 'دراسات لغوية', 'دراسات لغوية'
+                        else:
+                            if 'أدب عربي' in level_name or 'أدب عربي حديث ومعاصر' in level_name: division = 'دراسات أدبية'
+                            elif 'لسانيات عامة' in level_name: division = 'دراسات لغوية'
+                            elif 'نقد ومناهج' in level_name or 'نقد عربي قديم' in level_name: division = 'دراسات نقدية'
+                            match = re.search(r'\((.*?)\)', level_name)
+                            if match: specialization = match.group(1)
+
+                        data_row = [level_abbr, course_type, division, specialization, trimmed_course_name]
+                        for col_offset, value in enumerate(data_row):
+                            worksheet.cell(row=current_row, column=7 + col_offset, value=value)
+                        
+                        current_row += 1
+
+                end_row = current_row - 1
+                
+                for r in range(teacher_start_row, end_row + 1):
+                    worksheet.row_dimensions[r].height = None
+                    for c in range(1, 15):
+                        cell = worksheet.cell(row=r, column=c)
+                        if c >= 7 and c <= 11: cell.alignment = cell_alignment
+                        else: cell.alignment = merged_alignment
+                        cell.border = thin_border
+                        
+                        # ✨✨ 3. بداية التعديل: تطبيق لون الخلفية بشكل شرطي ✨✨
+                        if is_banded_row:
+                            cell.fill = banded_fill
+                        # ✨✨ نهاية التعديل ✨✨
+
+                if total_rows_for_teacher > 0:
+                    cell_a = worksheet.cell(row=teacher_start_row, column=1); cell_a.value = professor_number; cell_a.font = Font(bold=True)
+                    cell_b = worksheet.cell(row=teacher_start_row, column=2); cell_b.value = teacher_name; cell_b.font = Font(bold=True)
+                    if total_rows_for_teacher > 1:
+                        worksheet.merge_cells(start_row=teacher_start_row, start_column=1, end_row=end_row, end_column=1)
+                        worksheet.merge_cells(start_row=teacher_start_row, start_column=2, end_row=end_row, end_column=2)
+                        for col in [3, 4, 5, 6, 12, 13, 14]:
+                            worksheet.merge_cells(start_row=teacher_start_row, start_column=col, end_row=end_row, end_column=col)
+                
+                professor_number += 1
+
+        output.seek(0)
+        return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', as_attachment=True, download_name='العبء_البيداغوجي_للأساتذة.xlsx')
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": f"فشل إنشاء الملف: {e}"}), 500
+# ================== نهاية النسخة النهائية مع إضافة تلوين الصفوف المتناوب ==================
 
 # ================== الجزء الإضافي: النسخ الاحتياطي والاستعادة (محول إلى SQLite) ==================
 @app.route('/api/backup', methods=['GET'])

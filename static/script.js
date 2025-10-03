@@ -1736,6 +1736,51 @@ function displaySchedules(scheduleData, days, slots) {
     manualEditBtn.addEventListener('click', toggleManualEditingMode);
     row3.appendChild(manualEditBtn);
     
+    // ================== بداية كود زر تصدير العبء البيداغوجي ==================
+    const exportLoadBtn = document.createElement('button');
+    exportLoadBtn.id = 'export-teaching-load-btn';
+    exportLoadBtn.textContent = '🗂️ تصدير العبء البيداغوجي';
+    exportLoadBtn.style.backgroundColor = '#9C27B0'; // لون بنفسجي مميز
+    exportLoadBtn.style.color = 'white';
+
+    exportLoadBtn.addEventListener('click', () => {
+        exportLoadBtn.disabled = true;
+        exportLoadBtn.textContent = 'جاري التجهيز...';
+
+        fetch('/api/export/teaching-load')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('فشل الخادم في إنشاء الملف.');
+                }
+                const header = response.headers.get('Content-Disposition');
+                const filenameMatch = header && header.match(/filename="(.+)"/);
+                // فك تشفير اسم الملف للتعامل مع الأحرف العربية
+                const filename = filenameMatch ? decodeURIComponent(escape(window.atob(filenameMatch[1]))) : 'العبء_البيداغوجي.xlsx';
+                return Promise.all([response.blob(), filename]);
+            })
+            .then(([blob, filename]) => {
+                const downloadUrl = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = downloadUrl;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(downloadUrl);
+                document.body.removeChild(a);
+            })
+            .catch(error => {
+                console.error('Export Error:', error);
+                alert('حدث خطأ أثناء عملية التصدير.');
+            })
+            .finally(() => {
+                exportLoadBtn.disabled = false;
+                exportLoadBtn.textContent = '🗂️ تصدير العبء البيداغوجي';
+            });
+    });
+    row3.appendChild(exportLoadBtn); // إضافة الزر إلى نفس صف زر التعديل اليدوي
+    // ================== نهاية كود زر تصدير العبء البيداغوجي ==================
+
     // --- إضافة كل الصفوف إلى الحاوية الرئيسية ---
     buttonsContainer.appendChild(row1);
     buttonsContainer.appendChild(wordExportRow); // <-- إضافة صف الوورد الجديد
